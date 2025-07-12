@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 
 const express = require('express');
@@ -30,6 +29,87 @@ app.use((req, res, next) => {
   next();
 });
 
+// 🗺️ Enhanced function to parse coordinates from message
+function parseCoordinates(message) {
+  let latitude = null;
+  let longitude = null;
+  
+  console.log('🔍 Parsing coordinates from message:', message);
+  
+  // Multiple patterns to catch different formats
+  const patterns = [
+    // Standard formats
+    /latitude\s*[-:=]?\s*([+-]?\d+\.?\d*)/i,
+    /lat\s*[-:=]?\s*([+-]?\d+\.?\d*)/i,
+    /longitude\s*[-:=]?\s*([+-]?\d+\.?\d*)/i,
+    /long\s*[-:=]?\s*([+-]?\d+\.?\d*)/i,
+    /lng\s*[-:=]?\s*([+-]?\d+\.?\d*)/i,
+    
+    // GPS coordinates format
+    /gps\s*[-:=]?\s*([+-]?\d+\.?\d*)[,\s]+([+-]?\d+\.?\d*)/i,
+    
+    // Coordinates format: "Coordinates: lat, lng"
+    /coordinates?\s*[-:=]?\s*([+-]?\d+\.?\d*)[,\s]+([+-]?\d+\.?\d*)/i,
+    
+    // Location format: "Location: lat, lng"
+    /location\s*[-:=]?\s*([+-]?\d+\.?\d*)[,\s]+([+-]?\d+\.?\d*)/i,
+    
+    // Position format: "Position: lat, lng"
+    /position\s*[-:=]?\s*([+-]?\d+\.?\d*)[,\s]+([+-]?\d+\.?\d*)/i,
+    
+    // Simple format: "lat, lng" or "latitude, longitude"
+    /([+-]?\d+\.?\d*)[,\s]+([+-]?\d+\.?\d*)/
+  ];
+  
+  // Try latitude patterns first
+  for (const pattern of patterns.slice(0, 2)) {
+    const match = message.match(pattern);
+    if (match && match[1]) {
+      const parsedLat = parseFloat(match[1]);
+      if (!isNaN(parsedLat) && parsedLat >= -90 && parsedLat <= 90) {
+        latitude = parsedLat;
+        console.log(`📍 Found latitude: ${latitude}`);
+        break;
+      }
+    }
+  }
+  
+  // Try longitude patterns
+  for (const pattern of patterns.slice(2, 5)) {
+    const match = message.match(pattern);
+    if (match && match[1]) {
+      const parsedLng = parseFloat(match[1]);
+      if (!isNaN(parsedLng) && parsedLng >= -180 && parsedLng <= 180) {
+        longitude = parsedLng;
+        console.log(`📍 Found longitude: ${longitude}`);
+        break;
+      }
+    }
+  }
+  
+  // If we haven't found both coordinates, try combined patterns
+  if (!latitude || !longitude) {
+    for (const pattern of patterns.slice(5)) {
+      const match = message.match(pattern);
+      if (match && match[1] && match[2]) {
+        const parsedLat = parseFloat(match[1]);
+        const parsedLng = parseFloat(match[2]);
+        
+        if (!isNaN(parsedLat) && !isNaN(parsedLng) && 
+            parsedLat >= -90 && parsedLat <= 90 && 
+            parsedLng >= -180 && parsedLng <= 180) {
+          latitude = parsedLat;
+          longitude = parsedLng;
+          console.log(`📍 Found combined coordinates: ${latitude}, ${longitude}`);
+          break;
+        }
+      }
+    }
+  }
+  
+  return { latitude, longitude };
+}
+
 // 📥 Receive SMS Route
 app.post('/receive-sms', async (req, res) => {
   console.log('\n🔎 Raw request body:', req.body);
@@ -53,14 +133,14 @@ app.post('/receive-sms', async (req, res) => {
     console.log('⚠️ Volume not found in message.');
   }
 
-  let latitude = null;
-  let longitude = null;
-  const latMatch = message.match(/Latitude\s*[-:]?\s*([0-9.]+)/i);
-  const longMatch = message.match(/Longitude\s*[-:]?\s*([0-9.]+)/i);
-  if (latMatch && latMatch[1]) latitude = parseFloat(latMatch[1]);
-  if (longMatch && longMatch[1]) longitude = parseFloat(longMatch[1]);
-
-  console.log(`📍 Parsed coordinates: Latitude = ${latitude}, Longitude = ${longitude}`);
+  // 🗺️ Enhanced coordinate parsing
+  const { latitude, longitude } = parseCoordinates(message);
+  
+  if (latitude && longitude) {
+    console.log(`📍 Successfully parsed coordinates: Latitude = ${latitude}, Longitude = ${longitude}`);
+  } else {
+    console.log('⚠️ Could not parse valid coordinates from message');
+  }
 
   const smsData = {
     sender: title,
@@ -88,7 +168,12 @@ app.post('/receive-sms', async (req, res) => {
       console.log('📈 Updated total volume:', updatedCounter.totalVolume);
     }
 
-    res.status(200).json({ status: 'success', received: true, id: savedSMS._id });
+    res.status(200).json({ 
+      status: 'success', 
+      received: true, 
+      id: savedSMS._id,
+      coordinates: latitude && longitude ? { latitude, longitude } : null
+    });
   } catch (err) {
     console.error('❌ Error saving SMS:', err);
     res.status(500).json({ status: 'error', message: 'Failed to save SMS' });
@@ -116,6 +201,8 @@ app.get('/latest-sms', async (req, res) => {
       id: latestSMS._id,
       sender: latestSMS.sender,
       receivedAt: latestSMS.receivedAt,
+      latitude: latestSMS.latitude,
+      longitude: latestSMS.longitude,
       parsedFields: fields
     });
   } catch (err) {
@@ -148,6 +235,8 @@ app.get('/all-sms', async (req, res) => {
         id: sms._id,
         sender: sms.sender,
         receivedAt: sms.receivedAt,
+        latitude: sms.latitude,
+        longitude: sms.longitude,
         parsedFields: fields
       };
     });
@@ -156,6 +245,48 @@ app.get('/all-sms', async (req, res) => {
   } catch (err) {
     console.error('❌ Error retrieving all SMS messages:', err);
     res.status(500).json({ error: 'Failed to retrieve SMS messages' });
+  }
+});
+
+// 🗺️ NEW: Get SMS messages with valid coordinates for map
+app.get('/map-data', async (req, res) => {
+  try {
+    const smsWithCoords = await SMS.find({
+      latitude: { $ne: null },
+      longitude: { $ne: null }
+    }).sort({ receivedAt: -1 });
+
+    const mapData = smsWithCoords.map(sms => {
+      // Parse additional fields from message
+      const fields = {};
+      const lines = sms.message.split('\n');
+      lines.forEach(line => {
+        const [keyRaw, valueRaw] = line.split('-');
+        if (keyRaw && valueRaw) {
+          const key = keyRaw.trim().toLowerCase().replace(/\s+/g, '_');
+          const value = valueRaw.trim();
+          fields[key] = value;
+        }
+      });
+
+      return {
+        id: sms._id,
+        sender: sms.sender,
+        receivedAt: sms.receivedAt,
+        latitude: sms.latitude,
+        longitude: sms.longitude,
+        message: sms.message,
+        parsedFields: fields
+      };
+    });
+
+    res.json({
+      totalPoints: mapData.length,
+      points: mapData
+    });
+  } catch (err) {
+    console.error('❌ Error fetching map data:', err);
+    res.status(500).json({ error: 'Failed to fetch map data' });
   }
 });
 
@@ -215,7 +346,9 @@ app.get('/flow-data', async (req, res) => {
           y: discharge,
           deviceId,
           volume: volume || 0,
-          location
+          location,
+          latitude: sms.latitude,
+          longitude: sms.longitude
         });
       }
     }
@@ -239,5 +372,3 @@ app.use('/download', downloadReportRoute);
 app.listen(PORT, () => {
   console.log(`✅ SMS Receiver running at public URL on port ${PORT}`);
 });
-
-
