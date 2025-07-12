@@ -212,41 +212,41 @@ app.get('/latest-sms', async (req, res) => {
 });
 
 // 📤 All SMS
-// app.get('/all-sms', async (req, res) => {
-//   try {
-//     const allSMS = await SMS.find().sort({ createdAt: -1 });
-//     if (!allSMS || allSMS.length === 0) {
-//       return res.status(404).json({ error: 'No SMS messages found' });
-//     }
+app.get('/all-sms', async (req, res) => {
+  try {
+    const allSMS = await SMS.find().sort({ createdAt: -1 });
+    if (!allSMS || allSMS.length === 0) {
+      return res.status(404).json({ error: 'No SMS messages found' });
+    }
 
-//     const result = allSMS.map(sms => {
-//       const fields = {};
-//       const lines = sms.message.split('\n');
-//       lines.forEach(line => {
-//         const [keyRaw, valueRaw] = line.split('-');
-//         if (keyRaw && valueRaw) {
-//           const key = keyRaw.trim().toLowerCase().replace(/\s+/g, '_');
-//           const value = valueRaw.trim();
-//           fields[key] = value;
-//         }
-//       });
+    const result = allSMS.map(sms => {
+      const fields = {};
+      const lines = sms.message.split('\n');
+      lines.forEach(line => {
+        const [keyRaw, valueRaw] = line.split('-');
+        if (keyRaw && valueRaw) {
+          const key = keyRaw.trim().toLowerCase().replace(/\s+/g, '_');
+          const value = valueRaw.trim();
+          fields[key] = value;
+        }
+      });
 
-//       return {
-//         id: sms._id,
-//         sender: sms.sender,
-//         receivedAt: sms.receivedAt,
-//         latitude: sms.latitude,
-//         longitude: sms.longitude,
-//         parsedFields: fields
-//       };
-//     });
+      return {
+        id: sms._id,
+        sender: sms.sender,
+        receivedAt: sms.receivedAt,
+        latitude: sms.latitude,
+        longitude: sms.longitude,
+        parsedFields: fields
+      };
+    });
 
-//     return res.status(200).json(result);
-//   } catch (err) {
-//     console.error('❌ Error retrieving all SMS messages:', err);
-//     res.status(500).json({ error: 'Failed to retrieve SMS messages' });
-//   }
-// });
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('❌ Error retrieving all SMS messages:', err);
+    res.status(500).json({ error: 'Failed to retrieve SMS messages' });
+  }
+});
 
 // 🗺️ NEW: Get SMS messages with valid coordinates for map
 app.get('/map-data', async (req, res) => {
