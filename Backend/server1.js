@@ -421,6 +421,9 @@ mongoose.connect(MONGO_URI, {})
 const allowedOrigins = [
   'https://aniket-backend.vercel.app',
   'aniket-backend-8jvji8hx2-aniket-s-projects-b2fda10b.vercel.app',
+  'aniket-backend-git-main-aniket-s-projects-b2fda10b.vercel.app',
+  'aniket-backend-j6smfpzba-aniket-s-projects-b2fda10b.vercel.app',
+  'aniket-backend-aniket-s-projects-b2fda10b.vercel.app',
   'http://localhost:3000' // For local development
 ];
 
