@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
+// Fix for default marker icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
@@ -11,7 +12,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
 });
 
-// Line Graph Component with Datum Level
+// Line Graph Component
 const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) => {
   const [showGraphPanel, setShowGraphPanel] = useState(false);
   const [selectedGraphLocation, setSelectedGraphLocation] = useState('सांगली');
@@ -44,18 +45,12 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
     })).sort((a, b) => parseInt(a.device_id) - parseInt(b.device_id));
   }, [selectedGraphLocation, flowmeters, timeBasedData, isTimeSliderActive]);
 
-  // Compute datum level
   const datumLevel = useMemo(() => {
     if (graphData.length === 0) return null;
-
-    // Sort by device_id to get the last device
     const sortedByDeviceId = [...graphData].sort((a, b) => parseInt(a.device_id) - parseInt(b.device_id));
     const lastDevice = sortedByDeviceId[sortedByDeviceId.length - 1];
-
     const lastLevel = lastDevice?.पातळी;
     if (!isNaN(lastLevel)) return lastLevel;
-
-    // Fallback to min level - 1
     const minLevel = Math.min(...graphData.map(d => d.पातळी));
     return minLevel - 1;
   }, [graphData]);
@@ -88,7 +83,6 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
 
   return (
     <div style={{ position: 'relative' }}>
-      {/* Graph Toggle Button */}
       <div style={{
         position: 'fixed',
         bottom: '30px',
@@ -115,7 +109,6 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
         </button>
       </div>
 
-      {/* Graph Panel */}
       {showGraphPanel && (
         <div style={{
           position: 'fixed',
@@ -130,7 +123,6 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
           zIndex: 999,
           boxShadow: '0 -4px 20px rgba(0,0,0,0.2)'
         }}>
-          {/* Graph Header */}
           <div style={{
             backgroundColor: '#007bff',
             color: 'white',
@@ -165,7 +157,6 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
             </button>
           </div>
 
-          {/* Location Tabs */}
           <div style={{
             display: 'flex',
             borderBottom: '1px solid #dee2e6',
@@ -195,7 +186,6 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
             ))}
           </div>
 
-          {/* Parameter Selection */}
           <div style={{
             padding: '8px 15px',
             backgroundColor: '#f8f9fa',
@@ -228,7 +218,6 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
             </div>
           </div>
 
-          {/* Graph Content */}
           <div style={{ padding: '12px 15px 20px 15px' }}>
             <h4 style={{ 
               margin: '0 0 12px 0',
@@ -280,7 +269,6 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
                     wrapperStyle={{ paddingTop: '10px' }}
                   />
                   
-                  {/* Datum Level Reference Line */}
                   {datumLevel !== null && selectedParameter !== 'प्रवाह' && selectedParameter !== 'व्हॉल्यूम' && (
                     <ReferenceLine
                       y={datumLevel}
@@ -295,7 +283,6 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
                     />
                   )}
                   
-                  {/* Render lines based on selected parameter */}
                   {(selectedParameter === 'सर्व' || selectedParameter === 'प्रवाह') && (
                     <Line 
                       type="monotone" 
@@ -343,7 +330,6 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
               </div>
             )}
             
-            {/* Data Summary */}
             <div style={{
               marginTop: '12px',
               padding: '10px',
@@ -410,6 +396,8 @@ export default function FlowMap() {
   const [timeBasedData, setTimeBasedData] = useState({});
   const [activeStatsTab, setActiveStatsTab] = useState('सांगली');
   const [showStatsPanel, setShowStatsPanel] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const mapRef = useRef();
   const markerRefs = useRef({});
   const playbackInterval = useRef(null);
@@ -428,14 +416,11 @@ export default function FlowMap() {
 
   const allDevicesBounds = [[16.1, 74.0], [17.7, 75.5]];
 
-  // Updated getGroupForLocation function
   const getGroupForLocation = (location) => {
-    // Always return all devices with their current data, not just positions
     const currentData = isTimeSliderActive ? Object.values(timeBasedData) : flowmeters;
     
-    if (!location) return currentData; // Show all devices when no location selected
+    if (!location) return currentData;
 
-    // Filter devices based on location
     switch (location) {
       case 'सांगली':
         return currentData.filter(fm => parseInt(fm.device_id) >= 11 && parseInt(fm.device_id) <= 15);
@@ -489,157 +474,162 @@ export default function FlowMap() {
     };
   };
 
-  useEffect(() => {
-    const fetchLiveSmsData = async () => {
-      try {
-        console.log('🔄 Fetching SMS data for time range:', selectedTimeRange);
-        
-        const now = new Date();
-        let startDate;
-        
-        switch (selectedTimeRange) {
-          case '1day':
-            startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-            break;
-          case '1week':
-            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            break;
-          case '1month':
-            startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            break;
-          case '1year':
-            startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-            break;
-          default:
-            startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        }
+  const fetchLiveSmsData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      console.log('🔄 Fetching SMS data for time range:', selectedTimeRange);
+      
+      const now = new Date();
+      let startDate;
+      
+      switch (selectedTimeRange) {
+        case '1day':
+          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        case '1week':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '1month':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case '1year':
+          startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      }
 
       const res = await fetch(`${process.env.REACT_APP_API_URL}/all-sms`);
-
-const payload = await res.json();
-let list = Array.isArray(payload.data) ? payload.data : [];
-
-console.log('📡 Raw SMS data received:', list.length, 'messages');
-console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOString());
-
-
-        const parsed = list
-          .map((sms, index) => {
-            const pf = sms.parsedFields || {};
-            const lat = parseFloat(pf.latitude);
-            const lng = parseFloat(pf.longitude);
-            if (!lat || !lng) return null;
-
-            const receivedAt = new Date(sms.receivedAt);
-            const timestamp = receivedAt.getTime();
-            
-            if (timestamp < startDate.getTime()) return null;
-
-            return {
-              id: sms.id || index,
-              device_id: pf.device_id || 'N/A',
-              discharge: pf.discharge || 'N/A',
-              volume: pf.volume || 'N/A',
-              level: pf.level || 'N/A',
-              location: pf.location || 'Unknown',
-              lat,
-              lng,
-              receivedAt: sms.receivedAt,
-              timestamp,
-            };
-          })
-          .filter(Boolean);
-
-        setAllHistoricalData(parsed);
-
-        if (parsed.length > 0) {
-          const timestamps = parsed.map(p => p.timestamp);
-          const minTime = Math.min(...timestamps);
-          const maxTime = Math.max(...timestamps);
-          setTimeRange({ min: minTime, max: maxTime });
-          
-          if (!isTimeSliderActive) {
-            setTimeSliderValue(maxTime);
-          }
-        }
-
-        setHistory(prev => {
-          const updated = { ...prev };
-          parsed.forEach(fm => {
-            const key = fm.device_id;
-            if (!updated[key]) updated[key] = [];
-            const exists = updated[key].some(r => r.receivedAt === fm.receivedAt);
-            if (!exists) {
-              updated[key].push(fm);
-              updated[key].sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
-            }
-          });
-          return updated;
-        });
-
-        // Get latest data for each device
-        const latestByDevice = Object.values(
-          parsed.reduce((acc, curr) => {
-            const key = curr.device_id;
-            if (!acc[key] || new Date(curr.receivedAt) > new Date(acc[key].receivedAt)) {
-              acc[key] = curr;
-            }
-            return acc;
-          }, {})
-        );
-
-        // Updated device data merging logic
-        setFlowmeters(prev => {
-          const merged = [...prev];
-          latestByDevice.forEach(newDevice => {
-            const existingIndex = merged.findIndex(d => d.device_id === newDevice.device_id);
-            if (existingIndex >= 0) {
-              merged[existingIndex] = newDevice; // Update existing
-            } else {
-              merged.push(newDevice); // Add new
-            }
-          });
-          
-          // If we have very few new devices, keep old ones that aren't updated
-          if (latestByDevice.length < 5) {
-            console.log('⚠️ Very few new devices found, preserving old data');
-          }
-          
-          console.log('📊 Total devices after merge:', merged.length);
-          return merged;
-        });
-
-        // Updated device positions update logic
-        setDevicePositions(prevPositions => {
-          const newPositions = { ...prevPositions };
-          // Update positions for all current flowmeters
-          flowmeters.forEach(device => {
-            if (device.lat && device.lng) {
-              newPositions[device.device_id] = {
-                lat: device.lat,
-                lng: device.lng,
-                location: device.location
-              };
-            }
-          });
-          // Also update with any new devices
-          latestByDevice.forEach(device => {
-            if (device.lat && device.lng) {
-              newPositions[device.device_id] = {
-                lat: device.lat,
-                lng: device.lng,
-                location: device.location
-              };
-            }
-          });
-          return newPositions;
-        });
-
-      } catch (err) {
-        console.error('❌ SMS डेटा मिळविण्यात अयशस्वी:', err);
+      
+      if (!res.ok) {
+        throw new Error(`API request failed with status ${res.status}`);
       }
-    };
 
+      const list = await res.json();
+      
+      if (!Array.isArray(list)) {
+        throw new Error('API response is not an array');
+      }
+
+      console.log('📡 Raw SMS data received:', list.length, 'messages');
+      console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOString());
+
+      const parsed = list
+        .map((sms, index) => {
+          const pf = sms.parsedFields || {};
+          const lat = parseFloat(pf.latitude);
+          const lng = parseFloat(pf.longitude);
+          if (!lat || !lng) return null;
+
+          const receivedAt = new Date(sms.receivedAt);
+          const timestamp = receivedAt.getTime();
+          
+          if (timestamp < startDate.getTime()) return null;
+
+          return {
+            id: sms.id || index,
+            device_id: pf.device_id || 'N/A',
+            discharge: pf.discharge || 'N/A',
+            volume: pf.volume || 'N/A',
+            level: pf.level || 'N/A',
+            location: pf.location || 'Unknown',
+            lat,
+            lng,
+            receivedAt: sms.receivedAt,
+            timestamp,
+          };
+        })
+        .filter(Boolean);
+
+      setAllHistoricalData(parsed);
+
+      if (parsed.length > 0) {
+        const timestamps = parsed.map(p => p.timestamp);
+        const minTime = Math.min(...timestamps);
+        const maxTime = Math.max(...timestamps);
+        setTimeRange({ min: minTime, max: maxTime });
+        
+        if (!isTimeSliderActive) {
+          setTimeSliderValue(maxTime);
+        }
+      }
+
+      setHistory(prev => {
+        const updated = { ...prev };
+        parsed.forEach(fm => {
+          const key = fm.device_id;
+          if (!updated[key]) updated[key] = [];
+          const exists = updated[key].some(r => r.receivedAt === fm.receivedAt);
+          if (!exists) {
+            updated[key].push(fm);
+            updated[key].sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
+          }
+        });
+        return updated;
+      });
+
+      const latestByDevice = Object.values(
+        parsed.reduce((acc, curr) => {
+          const key = curr.device_id;
+          if (!acc[key] || new Date(curr.receivedAt) > new Date(acc[key].receivedAt)) {
+            acc[key] = curr;
+          }
+          return acc;
+        }, {})
+      );
+
+      setFlowmeters(prev => {
+        const merged = [...prev];
+        latestByDevice.forEach(newDevice => {
+          const existingIndex = merged.findIndex(d => d.device_id === newDevice.device_id);
+          if (existingIndex >= 0) {
+            merged[existingIndex] = newDevice;
+          } else {
+            merged.push(newDevice);
+          }
+        });
+        
+        if (latestByDevice.length < 5) {
+          console.log('⚠️ Very few new devices found, preserving old data');
+        }
+        
+        console.log('📊 Total devices after merge:', merged.length);
+        return merged;
+      });
+
+      setDevicePositions(prevPositions => {
+        const newPositions = { ...prevPositions };
+        flowmeters.forEach(device => {
+          if (device.lat && device.lng) {
+            newPositions[device.device_id] = {
+              lat: device.lat,
+              lng: device.lng,
+              location: device.location
+            };
+          }
+        });
+        latestByDevice.forEach(device => {
+          if (device.lat && device.lng) {
+            newPositions[device.device_id] = {
+              lat: device.lat,
+              lng: device.lng,
+              location: device.location
+            };
+          }
+        });
+        return newPositions;
+      });
+
+    } catch (err) {
+      console.error('❌ SMS डेटा मिळविण्यात अयशस्वी:', err);
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchLiveSmsData();
     const interval = setInterval(fetchLiveSmsData, 10000);
     return () => clearInterval(interval);
@@ -786,7 +776,55 @@ console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOS
 
   return (
     <div style={{ position: 'relative' }}>
-      {/* Stats Panel - Top Right Floating */}
+      {error && (
+        <div style={{
+          position: 'fixed',
+          top: '10px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 2000,
+          backgroundColor: '#dc3545',
+          color: 'white',
+          padding: '10px 20px',
+          borderRadius: '5px',
+          boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px'
+        }}>
+          <span>⚠️ {error}</span>
+          <button 
+            onClick={() => setError(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {isLoading && (
+        <div style={{
+          position: 'fixed',
+          top: '10px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 2000,
+          backgroundColor: '#17a2b8',
+          color: 'white',
+          padding: '10px 20px',
+          borderRadius: '5px',
+          boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
+        }}>
+          डेटा लोड होत आहे...
+        </div>
+      )}
+
       {showStatsPanel && (
         <div style={{
           position: 'absolute',
@@ -801,7 +839,6 @@ console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOS
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           fontSize: '14px'
         }}>
-          {/* Stats Panel Header */}
           <div style={{
             backgroundColor: '#007bff',
             color: 'white',
@@ -829,7 +866,6 @@ console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOS
             </button>
           </div>
 
-          {/* Tab Navigation */}
           <div style={{
             display: 'flex',
             borderBottom: '1px solid #ddd'
@@ -855,7 +891,6 @@ console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOS
             ))}
           </div>
 
-          {/* Stats Content */}
           <div style={{ padding: '12px' }}>
             {(() => {
               const stats = calculateLocationStats(activeStatsTab);
@@ -949,7 +984,6 @@ console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOS
         </div>
       )}
 
-      {/* Show Stats Button when panel is hidden */}
       {!showStatsPanel && (
         <button
           onClick={() => setShowStatsPanel(true)}
@@ -973,7 +1007,7 @@ console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOS
         </button>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem', gap: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
         <button onClick={handleShowAllDevices} style={{
           padding: '0.5rem 1rem',
           backgroundColor: selectedLocation === null ? '#007bff' : '#ccc',
@@ -1011,7 +1045,6 @@ console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOS
         </button>
       </div>
 
-      {/* Time Slider Controls */}
       {isTimeSliderActive && (
         <div style={{ 
           padding: '1rem', 
@@ -1020,7 +1053,7 @@ console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOS
           borderRadius: '8px',
           margin: '0 1rem'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
             <h4 style={{ margin: 0 }}>🕰️ टाइम स्लाइडर</h4>
             <button 
               onClick={() => setIsPlaying(!isPlaying)}
@@ -1047,8 +1080,7 @@ console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOS
             </select>
           </div>
 
-          {/* Time Range Selection */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 'bold' }}>कालावधी:</span>
             {[
               { value: '1day', label: '१ दिवस' },
@@ -1074,7 +1106,7 @@ console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOS
             ))}
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
             <span style={{ minWidth: '120px', fontSize: '0.9rem' }}>
               {formatTimestamp(timeRange.min)}
             </span>
@@ -1226,7 +1258,6 @@ console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOS
         </div>
       )}
 
-      {/* Line Graph Component */}
       <LineGraphComponent 
         flowmeters={flowmeters} 
         timeBasedData={timeBasedData} 
