@@ -420,6 +420,7 @@ mongoose.connect(MONGO_URI, {})
 // Configure CORS
 const allowedOrigins = [
   'https://aniket-backend.vercel.app',
+  'aniket-backend-8jvji8hx2-aniket-s-projects-b2fda10b.vercel.app',
   'http://localhost:3000' // For local development
 ];
 
