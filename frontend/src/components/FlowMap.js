@@ -500,45 +500,61 @@ export default function FlowMap() {
           startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       }
 
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/all-sms`);
-      
+      // Updated API endpoint - hardcoded to render.com backend
+      const res = await fetch('https://aniket-backend.onrender.com/flow-data');
       if (!res.ok) {
         throw new Error(`API request failed with status ${res.status}`);
       }
 
-      const list = await res.json();
-      
-      if (!Array.isArray(list)) {
-        throw new Error('API response is not an array');
+      const json = await res.json();
+      const list = Array.isArray(json.points) ? json.points : [];
+
+      if (list.length === 0) {
+        console.warn('⚠️ No flow data available');
+        setAllHistoricalData([]);
+        setFlowmeters([]);
+        setTimeRange({ min: 0, max: 0 });
+        return;
       }
 
       console.log('📡 Raw SMS data received:', list.length, 'messages');
-      console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOString());
-
+      
       const parsed = list
-        .map((sms, index) => {
-          const pf = sms.parsedFields || {};
-          const lat = parseFloat(pf.latitude);
-          const lng = parseFloat(pf.longitude);
-          if (!lat || !lng) return null;
+        .map((point, index) => {
+          try {
+            // Parse coordinates - handle both string and number formats
+            const lat = parseFloat(point.latitude);
+            const lng = parseFloat(point.longitude);
+            if (isNaN(lat) || isNaN(lng)) {
+              console.warn('Invalid coordinates for point:', point);
+              return null;
+            }
 
-          const receivedAt = new Date(sms.receivedAt);
-          const timestamp = receivedAt.getTime();
-          
-          if (timestamp < startDate.getTime()) return null;
+            const receivedAt = new Date(point.x);
+            if (isNaN(receivedAt.getTime())) {
+              console.warn('Invalid date for point:', point);
+              return null;
+            }
+            
+            const timestamp = receivedAt.getTime();
+            if (timestamp < startDate.getTime()) return null;
 
-          return {
-            id: sms.id || index,
-            device_id: pf.device_id || 'N/A',
-            discharge: pf.discharge || 'N/A',
-            volume: pf.volume || 'N/A',
-            level: pf.level || 'N/A',
-            location: pf.location || 'Unknown',
-            lat,
-            lng,
-            receivedAt: sms.receivedAt,
-            timestamp,
-          };
+            return {
+              id: `${point.deviceId || 'unknown'}-${index}`,
+              device_id: point.deviceId || 'N/A',
+              discharge: point.y?.toString() || 'N/A',
+              volume: point.volume?.toString() || 'N/A',
+              level: point.level?.toString() || 'N/A',
+              location: point.location || 'Unknown',
+              lat,
+              lng,
+              receivedAt: point.x,
+              timestamp,
+            };
+          } catch (err) {
+            console.error('Error parsing point:', point, err);
+            return null;
+          }
         })
         .filter(Boolean);
 
@@ -553,63 +569,51 @@ export default function FlowMap() {
         if (!isTimeSliderActive) {
           setTimeSliderValue(maxTime);
         }
+      } else {
+        setTimeRange({ min: 0, max: 0 });
       }
 
+      // Update history data
       setHistory(prev => {
         const updated = { ...prev };
         parsed.forEach(fm => {
           const key = fm.device_id;
           if (!updated[key]) updated[key] = [];
-          const exists = updated[key].some(r => r.receivedAt === fm.receivedAt);
+          
+          // Check if this reading already exists
+          const exists = updated[key].some(
+            r => r.receivedAt === fm.receivedAt && r.device_id === fm.device_id
+          );
+          
           if (!exists) {
             updated[key].push(fm);
+            // Sort by timestamp ascending
             updated[key].sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
           }
         });
         return updated;
       });
 
-      const latestByDevice = Object.values(
-        parsed.reduce((acc, curr) => {
-          const key = curr.device_id;
-          if (!acc[key] || new Date(curr.receivedAt) > new Date(acc[key].receivedAt)) {
-            acc[key] = curr;
-          }
-          return acc;
-        }, {})
-      );
-
-      setFlowmeters(prev => {
-        const merged = [...prev];
-        latestByDevice.forEach(newDevice => {
-          const existingIndex = merged.findIndex(d => d.device_id === newDevice.device_id);
-          if (existingIndex >= 0) {
-            merged[existingIndex] = newDevice;
-          } else {
-            merged.push(newDevice);
-          }
-        });
-        
-        if (latestByDevice.length < 5) {
-          console.log('⚠️ Very few new devices found, preserving old data');
+      // Get latest reading for each device
+      const latestByDevice = parsed.reduce((acc, curr) => {
+        const key = curr.device_id;
+        if (!acc[key] || new Date(curr.receivedAt) > new Date(acc[key].receivedAt)) {
+          acc[key] = curr;
         }
-        
+        return acc;
+      }, {});
+
+      // Update flowmeters state
+      setFlowmeters(prev => {
+        const merged = Object.values(latestByDevice);
         console.log('📊 Total devices after merge:', merged.length);
         return merged;
       });
 
+      // Update device positions
       setDevicePositions(prevPositions => {
         const newPositions = { ...prevPositions };
-        flowmeters.forEach(device => {
-          if (device.lat && device.lng) {
-            newPositions[device.device_id] = {
-              lat: device.lat,
-              lng: device.lng,
-              location: device.location
-            };
-          }
-        });
-        latestByDevice.forEach(device => {
+        Object.values(latestByDevice).forEach(device => {
           if (device.lat && device.lng) {
             newPositions[device.device_id] = {
               lat: device.lat,
@@ -622,8 +626,10 @@ export default function FlowMap() {
       });
 
     } catch (err) {
-      console.error('❌ SMS डेटा मिळविण्यात अयशस्वी:', err);
+      console.error('❌ Failed to fetch SMS data:', err);
       setError(err.message);
+      setFlowmeters([]);
+      setAllHistoricalData([]);
     } finally {
       setIsLoading(false);
     }
