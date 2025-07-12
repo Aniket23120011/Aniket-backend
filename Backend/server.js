@@ -21,26 +21,31 @@ mongoose.connect(MONGO_URI, {})
   });
 
 app.use(bodyParser.json());
+
 const allowedOrigins = [
   'https://aniket-backend.vercel.app',
-  'aniket-backend-8jvji8hx2-aniket-s-projects-b2fda10b.vercel.app',
-  'aniket-backend-git-main-aniket-s-projects-b2fda10b.vercel.app',
-  'aniket-backend-j6smfpzba-aniket-s-projects-b2fda10b.vercel.app',
-  'aniket-backend-aniket-s-projects-b2fda10b.vercel.app',
-  'https://aniket-backend-muor27fm0-aniket-s-projects-b2fda10b.vercel.app/',
-  'http://localhost:3000' // For local development
+  'https://aniket-backend-8jvji8hx2-aniket-s-projects-b2fda10b.vercel.app',
+  'https://aniket-backend-git-main-aniket-s-projects-b2fda10b.vercel.app',
+  'https://aniket-backend-j6smfpzba-aniket-s-projects-b2fda10b.vercel.app',
+  'https://aniket-backend-aniket-s-projects-b2fda10b.vercel.app',
+  'https://aniket-backend-muor27fm0-aniket-s-projects-b2fda10b.vercel.app', // Removed trailing slash
+  'http://localhost:3000'
 ];
+
 // Allow CORS
 app.use((req, res, next) => {
   const origin = req.headers.origin;
+  
+  // Check if origin is in allowedOrigins
   if (allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
 
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true'); // Optional, only if needed
+  res.header('Access-Control-Allow-Credentials', 'true');
 
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
