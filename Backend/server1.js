@@ -420,22 +420,23 @@ mongoose.connect(MONGO_URI, {})
 // Configure CORS
 const allowedOrigins = [
   'https://aniket-backend.vercel.app',
-  'aniket-backend-8jvji8hx2-aniket-s-projects-b2fda10b.vercel.app',
-  'aniket-backend-git-main-aniket-s-projects-b2fda10b.vercel.app',
-  'aniket-backend-j6smfpzba-aniket-s-projects-b2fda10b.vercel.app',
-  'aniket-backend-aniket-s-projects-b2fda10b.vercel.app',
-  'https://aniket-backend-muor27fm0-aniket-s-projects-b2fda10b.vercel.app/',
+  'https://*.vercel.app', // This will cover all Vercel deployment URLs
   'http://localhost:3000' // For local development
 ];
 
+// For development/testing purposes only
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    console.log('Origin:', origin); // Log the origin for debugging
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.includes(origin)) {
+    if (allowedOrigins.some(allowedOrigin => 
+      origin === allowedOrigin || 
+      origin.endsWith('.vercel.app') // Allow all Vercel subdomains
+    )) {
       callback(null, true);
     } else {
+      console.log('Blocked origin:', origin); // Log blocked origins
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -443,7 +444,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
-
 // Middleware
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
