@@ -6,32 +6,60 @@ export default function Dashboard() {
   const totalDevices = 15;
   const [activeDevices, setActiveDevices] = useState(0);
   const [volume, setVolume] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // ✅ Fetch total volume
- const fetchVolume = async () => {
-  try {
-    const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/total-volume`);
+  // Common fetch function with proper headers and error handling
+  const fetchData = async (endpoint) => {
+    try {
+      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}${endpoint}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          // Add if your API requires authentication:
+          // 'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
 
-    if (!res.ok) throw new Error('Failed to fetch volume');
-    const data = await res.json();
-    setVolume(data.totalVolume);
-  } catch (err) {
-    console.error('❌ Error fetching volume:', err);
-  }
-};
+      // First check if the response is OK (status 200-299)
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`API Error (${res.status}): ${errorText || 'Unknown error'}`);
+      }
 
-  // ✅ Fetch SMS data & determine active devices
+      // Verify content type is JSON
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Response is not JSON');
+      }
+
+      return await res.json();
+    } catch (err) {
+      console.error(`Error fetching ${endpoint}:`, err);
+      throw err; // Re-throw to handle in calling function
+    }
+  };
+
+  // Fetch total volume
+  const fetchVolume = async () => {
+    try {
+      const data = await fetchData('/total-volume');
+      setVolume(data.totalVolume || 0);
+      setError(null);
+    } catch (err) {
+      setError('Failed to load volume data');
+    }
+  };
+
+  // Fetch SMS data & determine active devices
   const fetchActiveDevices = async () => {
     try {
-     const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/all-sms`);
-
-      const payload = await res.json();
-
-      const smsList = Array.isArray(payload.data)
-        ? payload.data
-        : Array.isArray(payload.allSms)
-        ? payload.allSms
-        : [];
+      const payload = await fetchData('/all-sms');
+      
+      const smsList = Array.isArray(payload?.data) 
+        ? payload.data 
+        : Array.isArray(payload?.allSms) 
+          ? payload.allSms 
+          : [];
 
       const now = Date.now();
       const deviceLastSeen = {};
@@ -52,18 +80,25 @@ export default function Dashboard() {
       ).length;
 
       setActiveDevices(activeCount);
+      setError(null);
     } catch (err) {
-      console.error('❌ Error fetching SMS data:', err);
+      setError('Failed to load device data');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // ✅ Initial fetch and polling
+  // Initial fetch and polling
   useEffect(() => {
-    fetchVolume();
-    fetchActiveDevices();
+    // Initial fetch
+    const initializeData = async () => {
+      await Promise.all([fetchVolume(), fetchActiveDevices()]);
+    };
+    initializeData();
 
-    const smsInterval = setInterval(fetchActiveDevices, 2000);      // every 2 sec
-    const volumeInterval = setInterval(fetchVolume, 5 * 60 * 1000); // every 5 min
+    // Set up polling
+    const smsInterval = setInterval(fetchActiveDevices, 30000);      // every 30 sec
+    const volumeInterval = setInterval(fetchVolume, 5 * 60 * 1000);  // every 5 min
 
     return () => {
       clearInterval(smsInterval);
@@ -79,24 +114,29 @@ export default function Dashboard() {
           <p>{new Date().toLocaleString()}</p>
         </header>
 
-        <section className="dashboard-cards">
-          <div className="dashboard-card">
-            <h3>एकूण उपकरणे</h3>
-            <p>{totalDevices}</p>
-          </div>
-          <div className="dashboard-card active">
-            <h3>सक्रिय उपकरणे</h3>
-            <p>{activeDevices}</p>
-          </div>
-          <div className="dashboard-card inactive">
-            <h3>एकूण घनफळ</h3>
-            <p>{volume} घन मीटर</p>
-          </div>
-        </section>
+        {loading ? (
+          <div className="loading-message">Loading data...</div>
+        ) : error ? (
+          <div className="error-message">{error}</div>
+        ) : (
+          <section className="dashboard-cards">
+            <div className="dashboard-card">
+              <h3>एकूण उपकरणे</h3>
+              <p>{totalDevices}</p>
+            </div>
+            <div className="dashboard-card active">
+              <h3>सक्रिय उपकरणे</h3>
+              <p>{activeDevices}</p>
+            </div>
+            <div className="dashboard-card inactive">
+              <h3>एकूण घनफळ</h3>
+              <p>{volume} घन मीटर</p>
+            </div>
+          </section>
+        )}
 
         <VolumeBarChart />
       </main>
     </div>
   );
 }
-
