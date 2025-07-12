@@ -419,7 +419,7 @@ mongoose.connect(MONGO_URI, {})
 
 // Configure CORS
 const allowedOrigins = [
-  'https://aniket-flowmeter.vercel.app',
+  'https://aniket-backend.vercel.app/',
   'http://localhost:3000' // For local development
 ];
 
