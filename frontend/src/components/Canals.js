@@ -1,72 +1,125 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
-export default function Canals() {
-  const canalDeviceMap = {
-    सांगोला: ["1", "2", "3", "4", "5"],
-    "आटपाडी डावा": ["6", "7", "8", "9", "10"],
-    सांगली: ["11", "12", "13", "14", "15"],
+// Static device details (assumed)
+const deviceMeta = {
+  "1": { manufacturer: "AquaTech", serial: "AT1001", location: "Sangli", installed: "2024-06-01" },
+  "2": { manufacturer: "AquaTech", serial: "AT1002", location: "Sangli", installed: "2024-06-02" },
+  "3": { manufacturer: "HydroFlow", serial: "HF2001", location: "Sangli", installed: "2024-06-05" },
+  "4": { manufacturer: "HydroFlow", serial: "HF2002", location: "Sangli", installed: "2024-06-10" },
+  "5": { manufacturer: "FlowWorks", serial: "FW3001", location: "Sangli", installed: "2024-06-15" },
+  "6": { manufacturer: "AquaTech", serial: "AT1003", location: "Sangola", installed: "2024-06-01" },
+  "7": { manufacturer: "AquaTech", serial: "AT1004", location: "Sangola", installed: "2024-06-03" },
+  "8": { manufacturer: "HydroFlow", serial: "HF2003", location: "Sangola", installed: "2024-06-07" },
+  "9": { manufacturer: "HydroFlow", serial: "HF2004", location: "Sangola", installed: "2024-06-11" },
+  "10": { manufacturer: "FlowWorks", serial: "FW3002", location: "Sangola", installed: "2024-06-16" },
+  "11": { manufacturer: "AquaTech", serial: "AT1005", location: "Atapadi", installed: "2024-06-01" },
+  "12": { manufacturer: "AquaTech", serial: "AT1006", location: "Atapadi", installed: "2024-06-03" },
+  "13": { manufacturer: "HydroFlow", serial: "HF2005", location: "Atapadi", installed: "2024-06-08" },
+  "14": { manufacturer: "HydroFlow", serial: "HF2006", location: "Atapadi", installed: "2024-06-12" },
+  "15": { manufacturer: "FlowWorks", serial: "FW3003", location: "Atapadi", installed: "2024-06-18" },
+};
+
+const deviceGroups = {
+  Sangli: ["1", "2", "3", "4", "5"],
+  Sangola: ["6", "7", "8", "9", "10"],
+  Atapadi: ["11", "12", "13", "14", "15"],
+};
+
+export default function CanalTabs() {
+  const [activeTab, setActiveTab] = useState('Sangli');
+  const [lastSeenMap, setLastSeenMap] = useState({});
+
+  const fetchLastSms = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/all-sms');
+      const payload = await res.json();
+      const allSms = payload.data || payload.allSms || [];
+
+      const map = {};
+      for (const sms of allSms) {
+        const id = sms.parsedFields?.device_id;
+        const time = new Date(sms.receivedAt);
+        if (!id || isNaN(time)) continue;
+        if (!map[id] || new Date(map[id]) < time) {
+          map[id] = time;
+        }
+      }
+      setLastSeenMap(map);
+    } catch (err) {
+      console.error("❌ Error fetching SMS:", err);
+    }
   };
 
-  const activeDevices = ["1", "3", "6", "8", "11", "15"];
-  const isActive = (deviceId) => activeDevices.includes(deviceId);
+  useEffect(() => {
+    fetchLastSms(); // initial fetch
+    const interval = setInterval(fetchLastSms, 2000); // ⏱️ auto-refresh every 2 sec
+    return () => clearInterval(interval);
+  }, []);
 
-  const [openCanal, setOpenCanal] = useState(null);
-
-  const toggleCanal = (canal) => {
-    setOpenCanal(openCanal === canal ? null : canal);
+  const isActive = (deviceId) => {
+    const lastSeen = lastSeenMap[deviceId];
+    if (!lastSeen) return false;
+    const diff = new Date() - new Date(lastSeen);
+    return diff < 2 * 60 * 60 * 1000; // within 2 hours
   };
 
   return (
-    <div className="canals-container" style={{ maxWidth: '500px', margin: '0 auto', padding: '5px' }}>
-      <h2 style={{ textAlign: 'center', fontSize: '1.5rem', marginBottom: '10px', color: '#333' }}>कालवे</h2>
-      {Object.entries(canalDeviceMap).map(([canal, devices]) => (
-        <div key={canal} className="canal-section" style={{ marginBottom: '5px' }}>
-          <div
-            onClick={() => toggleCanal(canal)}
+    <div style={{ maxWidth: 900, margin: 'auto', padding: 20 }}>
+      <h2 style={{ textAlign: 'center', marginBottom: 16 }}>🚰 डिव्हाइस मॉनिटरिंग</h2>
+
+      {/* 🔁 Tabs */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
+        {Object.keys(deviceGroups).map((location) => (
+          <button
+            key={location}
+            onClick={() => setActiveTab(location)}
             style={{
-              background: '#e0e0e0',
-              color: '#222',
-              padding: '8px 10px',
-              borderRadius: '5px',
+              padding: '10px 20px',
+              backgroundColor: activeTab === location ? '#1e40af' : '#e0e7ff',
+              color: activeTab === location ? 'white' : '#1e3a8a',
+              border: 'none',
+              borderRadius: 6,
+              fontWeight: 'bold',
               cursor: 'pointer',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-              transition: 'background 0.3s',
+              transition: '0.3s',
             }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#d5d5d5'}
-            onMouseLeave={(e) => e.currentTarget.style.background = '#e0e0e0'}
           >
-            <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{canal}</h3>
-          </div>
-          {openCanal === canal && (
-            <ul
-              style={{
-                listStyle: 'none',
-                padding: '5px 10px',
-                margin: 0,
-                background: '#f9f9f9',
-                borderRadius: '0 0 5px 5px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-              }}
-            >
-              {devices.map((deviceId) => (
-                <li
-                  key={deviceId}
-                  style={{
-                    padding: '4px 8px',
-                    marginBottom: '4px',
-                    borderRadius: '4px',
-                    color: '#fff',
-                    backgroundColor: isActive(deviceId) ? '#4caf50' : '#f44336',
-                    fontSize: '0.85rem',
-                  }}
-                >
-                  उपकरण {deviceId} - {isActive(deviceId) ? 'सक्रिय' : 'असक्रिय'}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ))}
+            {location}
+          </button>
+        ))}
+      </div>
+
+      {/* 📋 Device Table */}
+      <table border="1" cellPadding="8" cellSpacing="0" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead style={{ backgroundColor: '#f0f0f0' }}>
+          <tr>
+            <th>उपकरण ID</th>
+            <th>निर्माता</th>
+            <th>सिरीयल क्रमांक</th>
+            <th>स्थान</th>
+            <th>प्रतिष्ठापन दिनांक</th>
+            <th>स्थिती</th>
+          </tr>
+        </thead>
+        <tbody>
+          {deviceGroups[activeTab].map((deviceId) => {
+            const meta = deviceMeta[deviceId] || {};
+            const status = isActive(deviceId);
+            return (
+              <tr key={deviceId}>
+                <td>{deviceId}</td>
+                <td>{meta.manufacturer || '-'}</td>
+                <td>{meta.serial || '-'}</td>
+                <td>{meta.location || '-'}</td>
+                <td>{meta.installed || '-'}</td>
+                <td style={{ fontWeight: 'bold', color: status ? 'green' : 'red' }}>
+                  {status ? '🟢 सक्रिय' : '🔴 बंद'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

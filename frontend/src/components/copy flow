@@ -1,0 +1,1027 @@
+import React, { useEffect, useState, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// Fix Leaflet marker icons
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+});
+
+const FlowMap = () => {
+  // State management
+  const [flowmeters, setFlowmeters] = useState([]);
+  const [selectedFlowmeter, setSelectedFlowmeter] = useState(null);
+  const [history, setHistory] = useState({});
+  const [selectedLocation, setSelectedLocation] = useState('सांगली');
+  const [allHistoricalData, setAllHistoricalData] = useState([]);
+  const [timeSliderValue, setTimeSliderValue] = useState(0);
+  const [isTimeSliderActive, setIsTimeSliderActive] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1000);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [timeRange, setTimeRange] = useState({ min: 0, max: 0 });
+  const [selectedTimeRange, setSelectedTimeRange] = useState('1day');
+  const [timeBasedData, setTimeBasedData] = useState({});
+  const [activeStatsTab, setActiveStatsTab] = useState('सांगली');
+  const [showStatsPanel, setShowStatsPanel] = useState(true);
+  const [showChartTab, setShowChartTab] = useState(true);
+  const [selectedChartLocation, setSelectedChartLocation] = useState('सांगली');
+  const [selectedParams, setSelectedParams] = useState(["discharge", "volume", "level"]);
+
+  // Refs
+  const mapRef = useRef();
+  const markerRefs = useRef({});
+  const playbackInterval = useRef(null);
+
+  // Constants
+  const LOCATIONS = ['सांगली', 'सांगोला', 'आटपाडी'];
+  const PARAMETERS = [
+    { key: 'discharge', label: 'प्रवाह (Discharge)', color: '#007bff' },
+    { key: 'volume', label: 'आयतन (Volume)', color: '#28a745' },
+    { key: 'level', label: 'स्तर (Level)', color: '#ffc107' }
+  ];
+
+  const locationCenters = {
+    'सांगली': [16.8676, 74.5704],
+    'सांगोला': [17.4342, 75.1905],
+    'आटपाडी': [17.4203, 74.9375],
+  };
+
+  const locationZooms = {
+    'सांगली': 13,
+    'सांगोला': 13,
+    'आटपाडी': 13
+  };
+
+  // Utility functions
+  const getGroupForLocation = (location) => {
+    if (!location) return flowmeters;
+    const deviceId = (fm) => parseInt(fm.device_id);
+    
+    return flowmeters.filter(fm => {
+      if (location === 'सांगली') return deviceId(fm) >= 11 && deviceId(fm) <= 15;
+      if (location === 'सांगोला') return deviceId(fm) >= 1 && deviceId(fm) <= 5;
+      if (location === 'आटपाडी') return deviceId(fm) >= 6 && deviceId(fm) <= 10;
+      return false;
+    });
+  };
+
+  const getChartDataByLocation = (loc) => {
+    return getGroupForLocation(loc).map(fm => ({
+      device: fm.device_id,
+      discharge: parseFloat(fm.discharge) || 0,
+      volume: parseFloat(fm.volume) || 0,
+      level: parseFloat(fm.level) || 0,
+      time: new Date(fm.receivedAt).toLocaleTimeString('hi-IN', {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      fullTime: new Date(fm.receivedAt).toLocaleString('hi-IN')
+    }));
+  };
+
+  const calculateLocationStats = (location) => {
+    const currentData = isTimeSliderActive ? Object.values(timeBasedData) : flowmeters;
+    const locationDevices = currentData.filter(fm => {
+      const deviceId = parseInt(fm.device_id);
+      if (location === 'सांगली') return deviceId >= 11 && deviceId <= 15;
+      if (location === 'सांगोला') return deviceId >= 1 && deviceId <= 5;
+      if (location === 'आटपाडी') return deviceId >= 6 && deviceId <= 10;
+      return false;
+    });
+
+    const validDischarges = locationDevices
+      .map(fm => parseFloat(fm.discharge))
+      .filter(d => !isNaN(d) && d !== 0);
+    
+    const validVolumes = locationDevices
+      .map(fm => parseFloat(fm.volume))
+      .filter(v => !isNaN(v) && v !== 0);
+
+    return {
+      avgDischarge: validDischarges.length > 0 
+        ? (validDischarges.reduce((sum, d) => sum + d, 0) / validDischarges.length).toFixed(2)
+        : '0.00',
+      totalVolume: validVolumes.length > 0 
+        ? validVolumes.reduce((sum, v) => sum + v, 0).toFixed(2)
+        : '0.00',
+      activeDevices: locationDevices.length,
+      validDischarges: validDischarges.length,
+      validVolumes: validVolumes.length
+    };
+  };
+
+  const formatTimestamp = (timestamp) => {
+    return new Date(timestamp).toLocaleString('hi-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // Data fetching
+  useEffect(() => {
+    const fetchLiveSmsData = async () => {
+      try {
+        const now = new Date();
+        let startDate;
+        
+        const ranges = {
+          '1day': 24 * 60 * 60 * 1000,
+          '1week': 7 * 24 * 60 * 60 * 1000,
+          '1month': 30 * 24 * 60 * 60 * 1000,
+          '1year': 365 * 24 * 60 * 60 * 1000
+        };
+
+        startDate = new Date(now.getTime() - (ranges[selectedTimeRange] || ranges['1day']));
+
+        const response = await fetch('http://localhost:5000/all-sms');
+        const { data = [] } = await response.json();
+
+        const parsed = data
+          .map((sms, index) => {
+            const pf = sms.parsedFields || {};
+            const lat = parseFloat(pf.latitude);
+            const lng = parseFloat(pf.longitude);
+            if (!lat || !lng) return null;
+
+            const receivedAt = new Date(sms.receivedAt);
+            const timestamp = receivedAt.getTime();
+            
+            if (timestamp < startDate.getTime()) return null;
+
+            return {
+              id: sms.id || index,
+              device_id: pf.device_id || 'N/A',
+              discharge: pf.discharge || 'N/A',
+              volume: pf.volume || 'N/A',
+              level: pf.level || 'N/A',
+              location: pf.location || 'Unknown',
+              lat,
+              lng,
+              receivedAt: sms.receivedAt,
+              timestamp,
+            };
+          })
+          .filter(Boolean);
+
+        setAllHistoricalData(parsed);
+
+        if (parsed.length > 0) {
+          const timestamps = parsed.map(p => p.timestamp);
+          setTimeRange({ 
+            min: Math.min(...timestamps), 
+            max: Math.max(...timestamps) 
+          });
+          
+          if (!isTimeSliderActive) {
+            setTimeSliderValue(Math.max(...timestamps));
+          }
+        }
+
+        setHistory(prev => {
+          const updated = { ...prev };
+          parsed.forEach(fm => {
+            const key = fm.device_id;
+            if (!updated[key]) updated[key] = [];
+            if (!updated[key].some(r => r.receivedAt === fm.receivedAt)) {
+              updated[key] = [...updated[key], fm]
+                .sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
+            }
+          });
+          return updated;
+        });
+
+        const latestByDevice = Object.values(
+          parsed.reduce((acc, curr) => {
+            const key = curr.device_id;
+            if (!acc[key] || new Date(curr.receivedAt) > new Date(acc[key].receivedAt)) {
+              acc[key] = curr;
+            }
+            return acc;
+          }, {})
+        );
+        setFlowmeters(latestByDevice);
+
+      } catch (err) {
+        console.error('Failed to fetch SMS:', err);
+      }
+    };
+
+    fetchLiveSmsData();
+    const interval = setInterval(fetchLiveSmsData, 10000);
+    return () => clearInterval(interval);
+  }, [selectedTimeRange]);
+
+  // Time slider effects
+  useEffect(() => {
+    if (isTimeSliderActive && allHistoricalData.length > 0) {
+      const dataAtTime = allHistoricalData.filter(data => data.timestamp <= timeSliderValue);
+      const latestByDevice = dataAtTime.reduce((acc, curr) => {
+        const key = curr.device_id;
+        if (!acc[key] || curr.timestamp > acc[key].timestamp) {
+          acc[key] = curr;
+        }
+        return acc;
+      }, {});
+      setTimeBasedData(latestByDevice);
+    } else {
+      setTimeBasedData(flowmeters.reduce((acc, curr) => {
+        acc[curr.device_id] = curr;
+        return acc;
+      }, {}));
+    }
+  }, [timeSliderValue, isTimeSliderActive, allHistoricalData, flowmeters]);
+
+  useEffect(() => {
+    if (isPlaying && isTimeSliderActive) {
+      playbackInterval.current = setInterval(() => {
+        setTimeSliderValue(prev => {
+          const step = (timeRange.max - timeRange.min) / 100;
+          const next = prev + step;
+          if (next >= timeRange.max) {
+            setIsPlaying(false);
+            return timeRange.max;
+          }
+          return next;
+        });
+      }, playbackSpeed);
+    } else if (playbackInterval.current) {
+      clearInterval(playbackInterval.current);
+    }
+
+    return () => {
+      if (playbackInterval.current) {
+        clearInterval(playbackInterval.current);
+      }
+    };
+  }, [isPlaying, isTimeSliderActive, timeRange, playbackSpeed]);
+
+  // Auto-open popups when location changes
+  useEffect(() => {
+    if (selectedLocation) {
+      const group = getGroupForLocation(selectedLocation);
+      // Delay slightly to ensure markers are rendered
+      setTimeout(() => {
+        group.forEach(fm => {
+          const marker = markerRefs.current[fm.device_id];
+          if (marker) {
+            marker.openPopup();
+            // Center the map on the first device
+            if (group[0] && fm.device_id === group[0].device_id) {
+              mapRef.current?.flyTo([fm.lat, fm.lng], locationZooms[selectedLocation], {
+                duration: 1
+              });
+            }
+          }
+        });
+      }, 300);
+    } else {
+      // Close all popups when no location is selected
+      Object.values(markerRefs.current).forEach(marker => {
+        if (marker) marker.closePopup();
+      });
+    }
+  }, [selectedLocation, flowmeters]);
+
+  // Location handlers
+  const handleLocationClick = (loc) => {
+    setSelectedLocation(loc);
+    setActiveStatsTab(loc);
+    setSelectedChartLocation(loc);
+    setSelectedFlowmeter(null); // Reset selected flowmeter
+  };
+
+  const handleShowAllDevices = () => {
+    setSelectedLocation(null);
+    setSelectedFlowmeter(null);
+    setSelectedChartLocation(null);
+    
+    // Close all popups
+    Object.values(markerRefs.current).forEach(marker => {
+      if (marker) marker.closePopup();
+    });
+
+    // Reset map view
+    const map = mapRef.current;
+    if (map) {
+      map.flyTo([17.1, 74.75], 10, { 
+        duration: 1.2, 
+        easeLinearity: 0.3 
+      });
+    }
+  };
+
+  const toggleTimeSlider = () => {
+    setIsTimeSliderActive(!isTimeSliderActive);
+    setIsPlaying(false);
+    if (!isTimeSliderActive) {
+      setTimeSliderValue(timeRange.max);
+    }
+  };
+
+  // Custom Tooltip Component for Chart
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload) return null;
+
+    return (
+      <div style={{
+        background: 'white',
+        border: '1px solid #ddd',
+        borderRadius: '4px',
+        padding: '10px',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+      }}>
+        <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>
+          डिव्हाइस: {label}
+        </p>
+        {payload.map((entry, index) => (
+          <div key={`tooltip-${index}`} style={{
+            color: entry.color,
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginBottom: '3px'
+          }}>
+            <span>
+              {entry.dataKey === 'discharge' ? 'प्रवाह' : 
+               entry.dataKey === 'volume' ? 'आयतन' : 'स्तर'}: 
+            </span>
+            <span style={{ fontWeight: 'bold', marginLeft: '10px' }}>
+              {entry.value} {entry.dataKey === 'discharge' ? 'लि./से.' : 
+                            entry.dataKey === 'volume' ? 'लिटर' : ''}
+            </span>
+          </div>
+        ))}
+        <p style={{ fontSize: '0.8em', color: '#666', marginTop: '5px' }}>
+          {payload[0]?.payload.fullTime || ''}
+        </p>
+      </div>
+    );
+  };
+
+  // Flowmeter Chart Component
+  const FlowmeterChart = () => {
+    const chartData = selectedChartLocation ? getChartDataByLocation(selectedChartLocation) : [];
+    const visibleParams = selectedParams.length > 0 ? selectedParams : ['discharge', 'volume', 'level'];
+
+    return (
+      <div style={{ 
+        padding: '1rem', 
+        background: '#f0f0f0', 
+        borderTop: '2px solid #ddd',
+        marginTop: '10px'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1rem'
+        }}>
+          <h3 style={{ margin: 0 }}>📈 प्रवाह आकडेवारी</h3>
+          <button 
+            onClick={() => setShowChartTab(!showChartTab)}
+            style={{
+              padding: '0.5rem 1rem',
+              backgroundColor: '#343a40',
+              color: 'white',
+              borderRadius: '5px',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            {showChartTab ? 'चार्ट लपवा' : 'चार्ट दाखवा'}
+          </button>
+        </div>
+
+        {showChartTab && (
+          <div style={{ 
+            background: 'white', 
+            borderRadius: '8px', 
+            padding: '1rem',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}>
+            {/* Location Selector */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '0.5rem',
+                fontWeight: 'bold',
+                color: '#555'
+              }}>
+                स्थान निवडा:
+              </label>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {LOCATIONS.map(loc => (
+                  <button
+                    key={loc}
+                    onClick={() => setSelectedChartLocation(loc)}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      backgroundColor: selectedChartLocation === loc ? '#007bff' : '#6c757d',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontWeight: selectedChartLocation === loc ? 'bold' : 'normal',
+                      minWidth: '100px'
+                    }}
+                  >
+                    {loc}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Parameter Selector */}
+            <div style={{ 
+              marginBottom: '1rem',
+              padding: '0.8rem',
+              backgroundColor: '#f8f9fa',
+              borderRadius: '5px'
+            }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '0.5rem',
+                fontWeight: 'bold',
+                color: '#555'
+              }}>
+                पॅरामीटर्स:
+              </label>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                {PARAMETERS.map(param => (
+                  <label 
+                    key={param.key}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      padding: '0.3rem 0.5rem',
+                      borderRadius: '4px',
+                      backgroundColor: visibleParams.includes(param.key) ? '#e2f0ff' : 'transparent'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedParams.includes(param.key)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedParams(prev => [...prev, param.key]);
+                        } else {
+                          setSelectedParams(prev => prev.filter(p => p !== param.key));
+                        }
+                      }}
+                      style={{ 
+                        marginRight: '0.5rem',
+                        accentColor: param.color
+                      }}
+                    />
+                    <span style={{ 
+                      display: 'inline-block',
+                      width: '12px',
+                      height: '12px',
+                      backgroundColor: param.color,
+                      marginRight: '0.5rem',
+                      borderRadius: '2px'
+                    }}></span>
+                    {param.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Chart Area */}
+            {selectedChartLocation ? (
+              <>
+                <div style={{ height: '350px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart 
+                      data={chartData}
+                      margin={{ top: 5, right: 20, left: 20, bottom: 60 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                      <XAxis 
+                        dataKey="device" 
+                        label={{ 
+                          value: 'डिव्हाइस ID', 
+                          position: 'bottom',
+                          offset: 15,
+                          fontSize: '12px'
+                        }} 
+                        angle={-45}
+                        textAnchor="end"
+                        height={60}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis 
+                        label={{ 
+                          value: 'मूल्य', 
+                          angle: -90, 
+                          position: 'left',
+                          fontSize: '12px'
+                        }}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend 
+                        formatter={(value) => (
+                          value === 'discharge' ? 'प्रवाह' :
+                          value === 'volume' ? 'आयतन' : 'स्तर'
+                        )}
+                        wrapperStyle={{ paddingTop: '20px' }}
+                      />
+                      
+                      {visibleParams.includes("discharge") && (
+                        <Line 
+                          type="monotone" 
+                          dataKey="discharge" 
+                          stroke="#007bff" 
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          activeDot={{ r: 6, strokeWidth: 2 }}
+                          name="discharge"
+                        />
+                      )}
+                      {visibleParams.includes("volume") && (
+                        <Line 
+                          type="monotone" 
+                          dataKey="volume" 
+                          stroke="#28a745" 
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          activeDot={{ r: 6, strokeWidth: 2 }}
+                          name="volume"
+                        />
+                      )}
+                      {visibleParams.includes("level") && (
+                        <Line 
+                          type="monotone" 
+                          dataKey="level" 
+                          stroke="#ffc107" 
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          activeDot={{ r: 6, strokeWidth: 2 }}
+                          name="level"
+                        />
+                      )}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ 
+                  textAlign: 'center', 
+                  marginTop: '0.5rem',
+                  fontSize: '0.8rem',
+                  color: '#666'
+                }}>
+                  शेवटचे अद्यतन: {new Date().toLocaleString('hi-IN')}
+                </div>
+              </>
+            ) : (
+              <div style={{ 
+                padding: '2rem', 
+                textAlign: 'center',
+                backgroundColor: '#f8f9fa',
+                borderRadius: '5px',
+                color: '#666'
+              }}>
+                <p>कृपया डेटा पाहण्यासाठी स्थान निवडा</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Stats Panel Component
+  const StatsPanel = () => {
+    const stats = calculateLocationStats(activeStatsTab);
+    
+    return (
+      <div style={{
+        position: 'absolute',
+        top: '10px',
+        right: '10px',
+        zIndex: 1000,
+        backgroundColor: 'white',
+        border: '2px solid #007bff',
+        borderRadius: '8px',
+        minWidth: '350px',
+        maxWidth: '400px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        fontSize: '14px'
+      }}>
+        <div style={{
+          backgroundColor: '#007bff',
+          color: 'white',
+          padding: '8px 12px',
+          borderRadius: '6px 6px 0 0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <span style={{ fontWeight: 'bold' }}>📊 स्थान आकडेवारी</span>
+          <button 
+            onClick={() => setShowStatsPanel(false)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'white',
+              fontSize: '16px',
+              cursor: 'pointer'
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', borderBottom: '1px solid #ddd' }}>
+          {LOCATIONS.map(location => (
+            <button
+              key={location}
+              onClick={() => setActiveStatsTab(location)}
+              style={{
+                flex: 1,
+                padding: '8px 4px',
+                border: 'none',
+                backgroundColor: activeStatsTab === location ? '#e3f2fd' : 'transparent',
+                color: activeStatsTab === location ? '#007bff' : '#666',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: activeStatsTab === location ? 'bold' : 'normal',
+                borderBottom: activeStatsTab === location ? '2px solid #007bff' : 'none'
+              }}
+            >
+              {location}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ padding: '12px' }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '8px'
+          }}>
+            <h4 style={{ margin: 0, color: '#007bff' }}>{activeStatsTab}</h4>
+            <span style={{
+              fontSize: '10px',
+              color: '#666',
+              backgroundColor: '#f0f0f0',
+              padding: '2px 6px',
+              borderRadius: '10px'
+            }}>
+              {isTimeSliderActive ? 'ऐतिहासिक' : 'वर्तमान'}
+            </span>
+          </div>
+          
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '8px',
+            marginBottom: '8px'
+          }}>
+            <div style={{
+              backgroundColor: '#e8f5e8',
+              padding: '8px',
+              borderRadius: '4px',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '11px', color: '#666' }}>सरासरी प्रवाह</div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#28a745' }}>
+                {stats.avgDischarge}
+              </div>
+              <div style={{ fontSize: '10px', color: '#666' }}>लि./से.</div>
+            </div>
+            
+            <div style={{
+              backgroundColor: '#e3f2fd',
+              padding: '8px',
+              borderRadius: '4px',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '11px', color: '#666' }}>एकूण वापर</div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#007bff' }}>
+                {stats.totalVolume}
+              </div>
+              <div style={{ fontSize: '10px', color: '#666' }}>लिटर</div>
+            </div>
+          </div>
+
+          <div style={{
+            fontSize: '11px',
+            color: '#666',
+            borderTop: '1px solid #eee',
+            paddingTop: '6px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>सक्रिय उपकरणे:</span>
+              <span style={{ fontWeight: 'bold' }}>{stats.activeDevices}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>वैध प्रवाह रीडिंग:</span>
+              <span style={{ fontWeight: 'bold' }}>{stats.validDischarges}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>वैध व्हॉल्यूम रीडिंग:</span>
+              <span style={{ fontWeight: 'bold' }}>{stats.validVolumes}</span>
+            </div>
+          </div>
+
+          <div style={{
+            fontSize: '10px',
+            color: '#999',
+            textAlign: 'center',
+            marginTop: '8px',
+            borderTop: '1px solid #eee',
+            paddingTop: '6px'
+          }}>
+            शेवटचे अपडेट: {new Date().toLocaleTimeString('hi-IN')}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Flowmeter Details Component
+  const FlowmeterDetails = () => {
+    if (!selectedFlowmeter) return null;
+    
+    const hist = history[selectedFlowmeter.device_id] || [];
+    const current = isTimeSliderActive ? 
+      (timeBasedData[selectedFlowmeter.device_id] || selectedFlowmeter) : 
+      selectedFlowmeter;
+    const previous = hist.length > 1 ? hist[hist.length - 2] : null;
+
+    const dischargeDelta = previous && current.discharge !== 'N/A' && previous.discharge !== 'N/A'
+      ? (parseFloat(current.discharge) - parseFloat(previous.discharge)).toFixed(2)
+      : 'N/A';
+    const volumeDelta = previous && current.volume !== 'N/A' && previous.volume !== 'N/A'
+      ? (parseFloat(current.volume) - parseFloat(previous.volume)).toFixed(2)
+      : 'N/A';
+
+    return (
+      <div style={{ padding: '1rem', background: '#f5f5f5' }}>
+        <h3>📊 निवडलेला फ्लोमीटर तपशील {isTimeSliderActive ? '(ऐतिहासिक डेटा)' : ''}</h3>
+        <div style={{ overflowX: 'auto' }}>
+          <table border="1" cellPadding="8" style={{ width: '100%', textAlign: 'left', minWidth: '800px' }}>
+            <thead>
+              <tr>
+                <th>डिव्हाइस आयडी</th>
+                <th>ठिकाण</th>
+                <th>पाणीचा प्रवाह (लि./से.)</th>
+                <th>मागील प्रवाह</th>
+                <th>फरक (Δ)</th>
+                <th>पाण्याचा एकूण वापर (लिटर)</th>
+                <th>मागील वापर</th>
+                <th>फरक (Δ)</th>
+                <th>पाण्याचा स्तर</th>
+                <th>वेळ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{current.device_id}</td>
+                <td>{current.location}</td>
+                <td>{current.discharge}</td>
+                <td>{previous ? previous.discharge : 'N/A'}</td>
+                <td>{dischargeDelta}</td>
+                <td>{current.volume}</td>
+                <td>{previous ? previous.volume : 'N/A'}</td>
+                <td>{volumeDelta}</td>
+                <td>{current.level || 'N/A'}</td>
+                <td>{current.receivedAt ? new Date(current.receivedAt).toLocaleString() : 'N/A'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {showStatsPanel && <StatsPanel />}
+      {!showStatsPanel && (
+        <button
+          onClick={() => setShowStatsPanel(true)}
+          style={{
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
+            zIndex: 1000,
+            backgroundColor: '#007bff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            padding: '8px 12px',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+          }}
+        >
+          📊 आकडेवारी
+        </button>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
+        <button onClick={handleShowAllDevices} style={{
+          padding: '0.5rem 1rem',
+          backgroundColor: selectedLocation === null ? '#007bff' : '#6c757d',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          fontWeight: selectedLocation === null ? 'bold' : 'normal'
+        }}>
+          सर्व उपकरणे
+        </button>
+        {LOCATIONS.map(loc => (
+          <button key={loc} onClick={() => handleLocationClick(loc)} style={{
+            padding: '0.5rem 1rem',
+            backgroundColor: selectedLocation === loc ? '#007bff' : '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontWeight: selectedLocation === loc ? 'bold' : 'normal'
+          }}>
+            {loc}
+          </button>
+        ))}
+        <button onClick={toggleTimeSlider} style={{
+          padding: '0.5rem 1rem',
+          backgroundColor: isTimeSliderActive ? '#28a745' : '#17a2b8',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          fontWeight: 'bold'
+        }}>
+          {isTimeSliderActive ? '🕰️ टाइम स्लाइडर बंद' : '🕰️ टाइम स्लाइडर चालू'}
+        </button>
+      </div>
+
+      {isTimeSliderActive && (
+        <div style={{ 
+          padding: '1rem', 
+          backgroundColor: '#f8f9fa', 
+          border: '1px solid #dee2e6',
+          borderRadius: '8px',
+          margin: '0 1rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+            <h4 style={{ margin: 0 }}>🕰️ टाइम स्लाइडर</h4>
+            <button 
+              onClick={() => setIsPlaying(!isPlaying)}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: isPlaying ? '#dc3545' : '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              {isPlaying ? '⏸️ रोकें' : '▶️ चलाएं'}
+            </button>
+            <select 
+              value={playbackSpeed} 
+              onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
+              style={{ padding: '0.3rem' }}
+            >
+              <option value={2000}>0.5x धीमा</option>
+              <option value={1000}>1x सामान्य</option>
+              <option value={500}>2x तेज़</option>
+              <option value={200}>5x तेज़</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+            <span style={{ fontWeight: 'bold' }}>काळ मुदत:</span>
+            {[
+              { value: '1day', label: '१ दिवस' },
+              { value: '1week', label: '१ आठवडा' },
+              { value: '1month', label: '१ महिना' },
+              { value: '1year', label: '१ वर्ष' }
+            ].map(range => (
+              <button
+                key={range.value}
+                onClick={() => setSelectedTimeRange(range.value)}
+                style={{
+                  padding: '0.3rem 0.8rem',
+                  backgroundColor: selectedTimeRange === range.value ? '#007bff' : '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem'
+                }}
+              >
+                {range.label}
+              </button>
+            ))}
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <span style={{ minWidth: '120px', fontSize: '0.9rem' }}>
+              {formatTimestamp(timeRange.min)}
+            </span>
+            <input
+              type="range"
+              min={timeRange.min}
+              max={timeRange.max}
+              value={timeSliderValue}
+              onChange={(e) => setTimeSliderValue(Number(e.target.value))}
+              style={{ 
+                flex: 1, 
+                height: '8px',
+                borderRadius: '4px',
+                background: '#ddd',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            />
+            <span style={{ minWidth: '120px', fontSize: '0.9rem', textAlign: 'right' }}>
+              {formatTimestamp(timeRange.max)}
+            </span>
+          </div>
+          
+          <div style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '1rem', fontWeight: 'bold' }}>
+            वर्तमान समय: {formatTimestamp(timeSliderValue)}
+          </div>
+        </div>
+      )}
+
+      <MapContainer
+        center={[17.1, 74.75]}
+        zoom={10}
+        style={{ height: '65vh', width: '100%' }}
+        ref={mapRef}
+        maxBoundsViscosity={0.7}
+        scrollWheelZoom={true}
+        doubleClickZoom={true}
+        touchZoom={true}
+        zoomSnap={0.25}
+        zoomDelta={0.5}
+        minZoom={9}
+        maxZoom={16}
+      >
+        <TileLayer
+          attribution='&copy; OpenStreetMap contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+
+        {getGroupForLocation(selectedLocation).map((fm) => {
+          const popupData = timeBasedData[fm.device_id] || fm;
+          return (
+            <Marker
+              key={fm.id}
+              position={[fm.lat, fm.lng]}
+              ref={(ref) => {
+                if (ref) markerRefs.current[fm.device_id] = ref;
+              }}
+              eventHandlers={{
+                click: () => setSelectedFlowmeter(fm),
+              }}
+            >
+              <Popup>
+                <div style={{
+                  minWidth: '200px',
+                  backgroundColor: selectedFlowmeter?.device_id === fm.device_id ? '#fff3cd' : 'white',
+                  border: selectedFlowmeter?.device_id === fm.device_id ? '2px solid orange' : '1px solid #ccc',
+                  padding: '0.5rem',
+                  borderRadius: '4px'
+                }}>
+                  <strong>डिव्हाइस आयडी:</strong> {popupData.device_id}<br />
+                  <strong>पाणीचा प्रवाह:</strong> {popupData.discharge || 'N/A'} लि./से.<br />
+                  <strong>पाण्याचा एकूण वापर:</strong> {popupData.volume || 'N/A'} लिटर<br />
+                  <strong>पाण्याचा स्तर:</strong> {popupData.level || 'N/A'}<br />
+                  <strong>ठिकाण:</strong> {popupData.location}<br />
+                  <strong>वेळ:</strong> {popupData.receivedAt ? new Date(popupData.receivedAt).toLocaleString() : 'N/A'}
+                  {isTimeSliderActive && (
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#666' }}>
+                      📅 ऐतिहासिक डेटा
+                    </div>
+                  )}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+      </MapContainer>
+
+      <FlowmeterChart />
+      <FlowmeterDetails />
+    </div>
+  );
+};
+
+export default FlowMap;

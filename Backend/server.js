@@ -1,18 +1,19 @@
-require('dotenv').config(); 
+
+require('dotenv').config();
 
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+const path = require('path');
 const SMS = require('./model/SMS');
 const VolumeCounter = require('./model/VolumeCounter');
+const downloadReportRoute = require('./routes/downloadReportRoute'); // ✅ updated route path
 
 const app = express();
-
 const PORT = process.env.PORT || 5000;
-
 const MONGO_URI = process.env.MONGO_URI;
 
-// Connect to MongoDB once when the server starts
+// Connect to MongoDB
 mongoose.connect(MONGO_URI, {})
   .then(() => console.log('✅ Connected to MongoDB'))
   .catch(err => {
@@ -20,47 +21,53 @@ mongoose.connect(MONGO_URI, {})
     process.exit(1);
   });
 
-
 app.use(bodyParser.json());
 
-
+// Allow CORS
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*'); 
+  res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   next();
 });
 
-
-
-
-
-// --- ROUTE TO RECEIVE SMS ---
+// 📥 Receive SMS Route
 app.post('/receive-sms', async (req, res) => {
   console.log('\n🔎 Raw request body:', req.body);
 
-  const {
-    package: pkg,
-    title,
-    message,
-    ticker_text,
-    timestamp,
-    category,
-  } = req.body;
+  const { package: pkg, title, message, ticker_text, timestamp, category } = req.body;
 
-  // Validate required fields
   if (!title || !message || !timestamp) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  // Parse timestamp as number → Date
   let ts = Number(timestamp);
   if (isNaN(ts)) ts = Date.now();
   const date = new Date(ts * 1000);
+
+  let parsedVolume = 0;
+  const volumeMatch = message.match(/Volume\s*[-:]?\s*(\d+)/i);
+  if (volumeMatch && volumeMatch[1]) {
+    parsedVolume = parseInt(volumeMatch[1], 10);
+    console.log(`🔢 Parsed volume: ${parsedVolume}`);
+  } else {
+    console.log('⚠️ Volume not found in message.');
+  }
+
+  let latitude = null;
+  let longitude = null;
+  const latMatch = message.match(/Latitude\s*[-:]?\s*([0-9.]+)/i);
+  const longMatch = message.match(/Longitude\s*[-:]?\s*([0-9.]+)/i);
+  if (latMatch && latMatch[1]) latitude = parseFloat(latMatch[1]);
+  if (longMatch && longMatch[1]) longitude = parseFloat(longMatch[1]);
+
+  console.log(`📍 Parsed coordinates: Latitude = ${latitude}, Longitude = ${longitude}`);
 
   const smsData = {
     sender: title,
     message: String(message),
     receivedAt: date,
+    latitude,
+    longitude,
     metadata: {
       package: pkg,
       ticker: ticker_text,
@@ -68,23 +75,10 @@ app.post('/receive-sms', async (req, res) => {
     }
   };
 
-  console.log('📩 Parsed SMS to store:', smsData);
-
-  // ⬇️ Extract volume from the message string
-  let parsedVolume = 0;
-  const volumeMatch = message.match(/Volume\s*[-:]?\s*(\d+)/i);
-  if (volumeMatch && volumeMatch[1]) {
-    parsedVolume = parseInt(volumeMatch[1], 10);
-    console.log(`🔢 Parsed volume: ${parsedVolume}`);
-  } else {
-    console.log('⚠️ Volume not found in message. Skipping volume accumulation.');
-  }
-
   try {
     const savedSMS = await SMS.create(smsData);
     console.log('✅ SMS saved to MongoDB with _id:', savedSMS._id);
 
-    // ⬇️ Update cumulative volume
     if (parsedVolume > 0) {
       const updatedCounter = await VolumeCounter.findOneAndUpdate(
         {},
@@ -101,17 +95,12 @@ app.post('/receive-sms', async (req, res) => {
   }
 });
 
-
+// 📤 Latest SMS
 app.get('/latest-sms', async (req, res) => {
   try {
-    // Fetch the latest SMS document (sorted by creation time)
     const latestSMS = await SMS.findOne().sort({ createdAt: -1 });
+    if (!latestSMS) return res.status(404).json({ error: 'No SMS messages found' });
 
-    if (!latestSMS) {
-      return res.status(404).json({ error: 'No SMS messages found' });
-    }
-
-    // Parse key-value pairs from the message
     const fields = {};
     const lines = latestSMS.message.split('\n');
     lines.forEach(line => {
@@ -135,18 +124,14 @@ app.get('/latest-sms', async (req, res) => {
   }
 });
 
-
-
+// 📤 All SMS
 app.get('/all-sms', async (req, res) => {
   try {
-    // Fetch all SMS documents, sorted from newest to oldest
     const allSMS = await SMS.find().sort({ createdAt: -1 });
-
     if (!allSMS || allSMS.length === 0) {
       return res.status(404).json({ error: 'No SMS messages found' });
     }
 
-    // Map each SMS to include parsed fields
     const result = allSMS.map(sms => {
       const fields = {};
       const lines = sms.message.split('\n');
@@ -174,46 +159,85 @@ app.get('/all-sms', async (req, res) => {
   }
 });
 
-
-
+// 📦 Total Volume
 app.get('/total-volume', async (req, res) => {
   const counter = await VolumeCounter.findOne();
   const total = counter ? counter.totalVolume : 0;
   res.json({ totalVolume: total });
 });
 
-
+// 📊 Flow Data
 app.get('/flow-data', async (req, res) => {
   try {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24h ago
-    const smsRecords = await SMS.find().sort({ receivedAt: 1 });
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const smsRecords = await SMS.find({ receivedAt: { $gte: since } }).sort({ receivedAt: 1 });
 
     const points = [];
 
-    smsRecords.forEach(sms => {
-      const dischargeMatch = sms.message.match(/Discharge\s*-\s*(\d+)/i);
-      const discharge = dischargeMatch ? Number(dischargeMatch[1]) : null;
+    for (const sms of smsRecords) {
+      const message = sms.message || '';
+      const lines = message.split('\n').map(line => line.trim());
 
-      if (discharge !== null && !isNaN(discharge)) {
+      let deviceId = null;
+      let discharge = null;
+      let volume = null;
+      let location = 'Unknown';
+
+      for (const line of lines) {
+        if (/device\s*id/i.test(line)) {
+          const match = line.match(/(?:device\s*id|deviceid|id)[\s\-:=]*(\d+)/i);
+          if (match) deviceId = parseInt(match[1], 10);
+        }
+
+        if (/discharge/i.test(line)) {
+          const match = line.match(/discharge[\s\-:=]*([\d.]+)/i);
+          if (match) discharge = parseFloat(match[1]);
+        }
+
+        if (/volume/i.test(line)) {
+          const match = line.match(/volume[\s\-:=]*([\d.]+)/i);
+          if (match) volume = parseFloat(match[1]);
+        }
+      }
+
+      if (deviceId >= 1 && deviceId <= 5) location = 'Sangli';
+      else if (deviceId >= 6 && deviceId <= 10) location = 'Sangola';
+      else if (deviceId >= 11 && deviceId <= 15) location = 'Atapadi';
+
+      if (
+        typeof deviceId === 'number' &&
+        typeof discharge === 'number' &&
+        !isNaN(deviceId) &&
+        !isNaN(discharge)
+      ) {
         points.push({
-          x: sms.receivedAt.toISOString(),  // ISO timestamp
-          y: discharge                      // discharge value
+          x: new Date(sms.receivedAt).toISOString(),
+          y: discharge,
+          deviceId,
+          volume: volume || 0,
+          location
         });
       }
-    });
+    }
 
-    console.log('📊 Flow data points:', points);
-    res.json({ points });
+    res.json({
+      points,
+      timeRange: '24 hours',
+      totalRecords: smsRecords.length,
+      validDischargeRecords: points.length
+    });
   } catch (err) {
-    console.error('❌ Error building flow data:', err);
+    console.error('❌ Error:', err);
     res.status(500).json({ error: 'Failed to fetch flow data' });
   }
 });
 
+// ✅ PDF Report Route
+app.use('/download', downloadReportRoute);
 
-
-
-// --- Start server ---
+// 🚀 Start Server
 app.listen(PORT, () => {
   console.log(`✅ SMS Receiver running at public URL on port ${PORT}`);
 });
+
+

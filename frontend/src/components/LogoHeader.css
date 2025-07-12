@@ -24,8 +24,15 @@
 }
 
 .logo-image {
-  height: 100px;
+  height: 80px;
   object-fit: contain;
+  margin-top: 40px;
+  margin-bottom: 10px;
+}
+.logo-image-1 {
+  height: 90px;
+  object-fit: contain;
+  margin-top: 40px;
   margin-bottom: 10px;
 }
 
@@ -80,4 +87,8 @@
   .logo-section {
     max-width: 100%;
   }
+}
+
+.mhlogo{
+  margin-top: -60PX;
 }

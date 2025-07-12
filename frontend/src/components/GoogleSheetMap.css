@@ -1,0 +1,10 @@
+.popup-content {
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+}
+
+.popup-content div {
+  margin-bottom: 4px;
+}
