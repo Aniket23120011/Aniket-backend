@@ -424,6 +424,7 @@ const allowedOrigins = [
   'aniket-backend-git-main-aniket-s-projects-b2fda10b.vercel.app',
   'aniket-backend-j6smfpzba-aniket-s-projects-b2fda10b.vercel.app',
   'aniket-backend-aniket-s-projects-b2fda10b.vercel.app',
+  'https://aniket-backend-muor27fm0-aniket-s-projects-b2fda10b.vercel.app/',
   'http://localhost:3000' // For local development
 ];
 
