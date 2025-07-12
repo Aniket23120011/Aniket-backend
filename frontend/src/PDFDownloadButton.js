@@ -11,8 +11,9 @@ const PDFDownloadButton = () => {
       return;
     }
 
-    const url = `http://localhost:5000/download/data-range?start=${startDate}&end=${endDate}`;
-    window.open(url, '_blank');
+   const url = `https://aniket-backend.onrender.com/download/data-range?start=${startDate}&end=${endDate}`;
+window.open(url, '_blank');
+
   };
 
   return (

@@ -17,9 +17,10 @@ export default function SmsTab() {
 
   const fetchAllSmsFromAPI = async () => {
     try {
-      const response = await fetch('http://localhost:5000/all-sms');
-      if (!response.ok) throw new Error('API error');
-      const payload = await response.json();
+      const res = await fetch('https://aniket-backend.onrender.com/all-sms');
+
+if (!res.ok) throw new Error('API error');
+const payload = await res.json();
 
       let list = Array.isArray(payload.data)
         ? payload.data

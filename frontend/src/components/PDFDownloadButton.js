@@ -19,10 +19,12 @@ const PDFDownloadButton = () => {
       return;
     }
 
-    const baseUrl =
-      reportType === 'flowmeter'
-        ? `http://localhost:5000/download/data-range?start=${startDate}&end=${endDate}&location=${location}`
-        : `http://localhost:5000/download/swf-range?start=${startDate}&end=${endDate}`;
+    const baseApiUrl = 'https://aniket-backend.onrender.com';
+
+const baseUrl =
+  reportType === 'flowmeter'
+    ? `${baseApiUrl}/download/data-range?start=${startDate}&end=${endDate}&location=${location}`
+    : `${baseApiUrl}/download/swf-range?start=${startDate}&end=${endDate}`;
 
     setIsLoading(true);
     

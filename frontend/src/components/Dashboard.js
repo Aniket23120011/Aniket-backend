@@ -8,21 +8,23 @@ export default function Dashboard() {
   const [volume, setVolume] = useState(0);
 
   // ✅ Fetch total volume
-  const fetchVolume = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/total-volume');
-      if (!response.ok) throw new Error('Failed to fetch volume');
-      const data = await response.json();
-      setVolume(data.totalVolume);
-    } catch (err) {
-      console.error('❌ Error fetching volume:', err);
-    }
-  };
+ const fetchVolume = async () => {
+  try {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/all-sms`);
+
+    if (!res.ok) throw new Error('Failed to fetch volume');
+    const data = await res.json();
+    setVolume(data.totalVolume);
+  } catch (err) {
+    console.error('❌ Error fetching volume:', err);
+  }
+};
 
   // ✅ Fetch SMS data & determine active devices
   const fetchActiveDevices = async () => {
     try {
-      const res = await fetch('http://localhost:5000/all-sms');
+     const res = await fetch(`${process.env.REACT_APP_API_URL}/all-sms`);
+
       const payload = await res.json();
 
       const smsList = Array.isArray(payload.data)

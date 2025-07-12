@@ -514,12 +514,14 @@ export default function FlowMap() {
             startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         }
 
-        const response = await fetch('http://localhost:5000/all-sms');
-        const payload = await response.json();
-        let list = Array.isArray(payload.data) ? payload.data : [];
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/all-sms`);
 
-        console.log('📡 Raw SMS data received:', list.length, 'messages');
-        console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOString());
+const payload = await res.json();
+let list = Array.isArray(payload.data) ? payload.data : [];
+
+console.log('📡 Raw SMS data received:', list.length, 'messages');
+console.log('📅 Date range filter:', startDate.toISOString(), 'to', now.toISOString());
+
 
         const parsed = list
           .map((sms, index) => {

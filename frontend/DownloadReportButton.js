@@ -5,10 +5,11 @@ const DownloadReportButton = () => {
     const start = '2025-07-01'; // you can make this dynamic
     const end = '2025-07-09';
 
-    try {
-      const response = await fetch(`http://localhost:5000/download/data-range?start=${start}&end=${end}`, {
-        method: 'GET',
-      });
+   try {
+  const response = await fetch(`https://aniket-backend.onrender.com/download/data-range?start=${start}&end=${end}`, {
+    method: 'GET',
+  });
+
 
       if (!response.ok) {
         throw new Error('Failed to fetch PDF');

@@ -36,7 +36,8 @@ export default function VolumeBarChart() {
   const [selectedDeviceId, setSelectedDeviceId] = useState(null);
 
   useEffect(() => {
-    fetch('http://localhost:5000/flow-data')
+   fetch('https://aniket-backend.onrender.com/flow-data')
+
       .then(res => res.json())
       .then(data => {
         if (data.points) setFlowData(data.points);

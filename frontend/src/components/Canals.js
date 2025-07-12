@@ -31,7 +31,8 @@ export default function CanalTabs() {
 
   const fetchLastSms = async () => {
     try {
-      const res = await fetch('http://localhost:5000/all-sms');
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/all-sms`);
+
       const payload = await res.json();
       const allSms = payload.data || payload.allSms || [];
 

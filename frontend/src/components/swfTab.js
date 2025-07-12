@@ -14,7 +14,8 @@ export default function SwfTab() {
 
   const fetchSWFData = async () => {
     try {
-      const res = await fetch('http://localhost:5000/all-swf');
+      const res = await fetch('https://aniket-backend.onrender.com/all-sms');
+
       if (!res.ok) throw new Error('API error');
       const payload = await res.json();
       const list = Array.isArray(payload) ? payload
