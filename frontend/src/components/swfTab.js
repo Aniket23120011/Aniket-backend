@@ -4,27 +4,27 @@ export default function SwfTab() {
   const [swfData, setSwfData] = useState([]);
   const [searchText, setSearchText] = useState('');
 
-  const deviceMap = {
-    'सांगली': ['S1'],
-    'सांगोला': ['S2'],
-    'आटपाडी': ['S3'],
-  };
+ const deviceMap = {
+  'सांगली': ['1'], // Changed from 'S1' to '1'
+  'सांगोला': ['2'],
+  'आटपाडी': ['3'],
+};
 
   const getTodayDateString = () => new Date().toISOString().split('T')[0];
 
   const fetchSWFData = async () => {
-    try {
-      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/all-sms`);
-
-      if (!res.ok) throw new Error('API error');
-      const payload = await res.json();
-      const list = Array.isArray(payload?.data) ? payload.data : [];
-
-      setSwfData(list);
-    } catch (err) {
-      console.error('डेटा मिळवताना त्रुटी:', err);
-    }
-  };
+  try {
+    const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/all-sms`);
+    if (!res.ok) throw new Error('API error');
+    
+    const payload = await res.json();
+    const list = Array.isArray(payload) ? payload : []; // Changed here
+    
+    setSwfData(list);
+  } catch (err) {
+    console.error('डेटा मिळवताना त्रुटी:', err);
+  }
+};
 
   useEffect(() => {
     fetchSWFData();
@@ -33,16 +33,18 @@ export default function SwfTab() {
   }, []);
 
   const parseMessage = (msg) => {
-    const dischargeMatch = msg.match(/Discharge\s*[:\-]?\s*(\d+)/i);
-    const deviceMatch    = msg.match(/Device\s*id\s*[:\-]?\s*(S[123])/i);
-    const locationMatch  = msg.match(/Location\s*[:\-]?\s*([A-Za-z]+)/i);
+  const dischargeMatch = msg.match(/Discharge\s*[:\-]?\s*(\d+)/i);
+  const deviceMatch = msg.match(/Device\s*id\s*[:\-]?\s*(\d+)/i); // Changed
+  const locationMatch = msg.match(/Location\s*[:\-]?\s*([^\n]+)/i); // More flexible
 
-    return {
-      discharge: dischargeMatch  ? dischargeMatch[1] : '-',
-      deviceId:  deviceMatch     ? deviceMatch[1]    : '-',
-      location:  locationMatch   ? locationMatch[1]  : '-',
-    };
+  return {
+    discharge: dischargeMatch?.[1] || '-',
+    deviceId: deviceMatch?.[1] || '-', // Now returns "1" instead of looking for "S1"
+    location: (locationMatch?.[1] || '-').trim(),
   };
+};
+    
+
 
   const todayStr = getTodayDateString();
   const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
