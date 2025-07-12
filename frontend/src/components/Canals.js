@@ -38,7 +38,9 @@ export default function CanalTabs() {
 
       const map = {};
       for (const sms of allSms) {
-        const id = sms.parsedFields?.device_id;
+        const match = sms.message.match(/Device Id- *(\d+)/i);
+        const id = match ? match[1] : null;
+
         const time = new Date(sms.receivedAt);
         if (!id || isNaN(time)) continue;
         if (!map[id] || new Date(map[id]) < time) {
