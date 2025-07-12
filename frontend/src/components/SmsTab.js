@@ -14,19 +14,47 @@ export default function SmsTab() {
     const today = new Date();
     return today.toISOString().split('T')[0];
   };
+  function parseSMS(message = '') {
+  const lines = message.split('\n');
+  const fields = {};
+
+  lines.forEach(line => {
+    const [keyRaw, valueRaw] = line.split(/[:\-]/);
+    const key = keyRaw?.trim().toLowerCase();
+    const value = valueRaw?.trim();
+
+    if (key && value) {
+      if (key.includes('device')) fields.device_id = value;
+      else if (key.includes('discharge')) fields.discharge = value;
+      else if (key.includes('volume')) fields.volume = value;
+      else if (key.includes('level')) fields.level = value;
+      else if (key.includes('location')) fields.location = value;
+      else if (key.includes('latitude')) fields.latitude = value;
+      else if (key.includes('longitude')) fields.longitude = value;
+    }
+  });
+
+  return fields;
+}
+
 
   const fetchAllSmsFromAPI = async () => {
     try {
-      const res = await fetch('https://aniket-backend.onrender.com/all-sms');
+      // console.log("Fetching from:", `${process.env.REACT_APP_BACKEND_URL}/all-sms`);
+      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/all-sms`);
 
 if (!res.ok) throw new Error('API error');
 const payload = await res.json();
 
-      let list = Array.isArray(payload.data)
-        ? payload.data
-        : Array.isArray(payload.allSms)
-        ? payload.allSms
-        : [];
+      let list = Array.isArray(payload?.data) ? payload.data : [];
+   
+
+// ✅ Add this to attach parsed fields
+list = list.map(sms => ({
+  ...sms,
+  parsedFields: parseSMS(sms.message)
+}));
+
 
       setSmsData(list);
     } catch (err) {

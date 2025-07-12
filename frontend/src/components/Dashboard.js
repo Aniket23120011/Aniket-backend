@@ -10,7 +10,7 @@ export default function Dashboard() {
   // ✅ Fetch total volume
  const fetchVolume = async () => {
   try {
-    const res = await fetch(`${process.env.REACT_APP_API_URL}/all-sms`);
+    const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/total-volume`);
 
     if (!res.ok) throw new Error('Failed to fetch volume');
     const data = await res.json();
@@ -23,7 +23,7 @@ export default function Dashboard() {
   // ✅ Fetch SMS data & determine active devices
   const fetchActiveDevices = async () => {
     try {
-     const res = await fetch(`${process.env.REACT_APP_API_URL}/all-sms`);
+     const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/all-sms`);
 
       const payload = await res.json();
 

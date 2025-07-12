@@ -14,13 +14,12 @@ export default function SwfTab() {
 
   const fetchSWFData = async () => {
     try {
-      const res = await fetch('https://aniket-backend.onrender.com/all-sms');
+      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/all-sms`);
 
       if (!res.ok) throw new Error('API error');
       const payload = await res.json();
-      const list = Array.isArray(payload) ? payload
-                   : Array.isArray(payload.allSwf) ? payload.allSwf
-                   : [];
+      const list = Array.isArray(payload?.data) ? payload.data : [];
+
       setSwfData(list);
     } catch (err) {
       console.error('डेटा मिळवताना त्रुटी:', err);

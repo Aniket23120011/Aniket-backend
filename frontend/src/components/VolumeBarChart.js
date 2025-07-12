@@ -22,6 +22,9 @@ const deviceGroups = {
   सांगली: [11, 12, 13, 14, 15],
 };
 
+
+
+
 // Reverse map for quick lookup
 const getLocationByDeviceId = (deviceId) => {
   for (const [loc, ids] of Object.entries(deviceGroups)) {
@@ -34,16 +37,27 @@ export default function VolumeBarChart() {
   const [flowData, setFlowData] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [selectedDeviceId, setSelectedDeviceId] = useState(null);
+useEffect(() => {
+  fetch(`${process.env.REACT_APP_BACKEND_URL}/flow-data`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.points) {
+        const transformed = data.points.map(p => {
+          const match = p.message.match(/Discharge\s*-\s*(\d+)/i);
+          const discharge = match ? parseFloat(match[1]) : null;
 
-  useEffect(() => {
-   fetch('https://aniket-backend.onrender.com/flow-data')
+          return {
+            ...p,
+            x: p.timestamp, // used in chart for time
+            y: discharge,   // discharge value for chart
+          };
+        }).filter(p => p.y !== null); // only keep entries with discharge
 
-      .then(res => res.json())
-      .then(data => {
-        if (data.points) setFlowData(data.points);
-      })
-      .catch(err => console.error('❌ Error fetching flow data:', err));
-  }, []);
+        setFlowData(transformed);
+      }
+    })
+    .catch(err => console.error('❌ Error fetching flow data:', err));
+}, []);
 
   // Reset device if location changes
   useEffect(() => {

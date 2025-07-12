@@ -20,7 +20,7 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
 
   const getLocationData = (location) => {
     const currentData = isTimeSliderActive ? Object.values(timeBasedData) : flowmeters;
-    
+
     switch (location) {
       case 'सांगली':
         return currentData.filter(fm => parseInt(fm.device_id) >= 11 && parseInt(fm.device_id) <= 15);
@@ -35,7 +35,7 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
 
   const graphData = useMemo(() => {
     const locationData = getLocationData(selectedGraphLocation);
-    
+
     return locationData.map(fm => ({
       device_id: fm.device_id,
       प्रवाह: parseFloat(fm.discharge) || 0,
@@ -219,7 +219,7 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
           </div>
 
           <div style={{ padding: '12px 15px 20px 15px' }}>
-            <h4 style={{ 
+            <h4 style={{
               margin: '0 0 12px 0',
               color: '#495057',
               textAlign: 'center',
@@ -228,47 +228,47 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
               {selectedGraphLocation} - {selectedParameter === 'सर्व' ? 'सर्व पॅरामीटर' : selectedParameter}
               {isTimeSliderActive && <span style={{ color: '#6c757d', fontSize: '11px' }}> (ऐतिहासिक डेटा)</span>}
             </h4>
-            
+
             {graphData.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
-                <LineChart 
-                  data={graphData} 
+                <LineChart
+                  data={graphData}
                   margin={{ top: 10, right: 30, left: 20, bottom: 60 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
-                  <XAxis 
-                    dataKey="device_id" 
+                  <XAxis
+                    dataKey="device_id"
                     stroke="#6c757d"
                     fontSize={11}
                     height={50}
-                    label={{ 
-                      value: 'डिव्हाइस आयडी', 
-                      position: 'insideBottom', 
-                      offset: -15, 
+                    label={{
+                      value: 'डिव्हाइस आयडी',
+                      position: 'insideBottom',
+                      offset: -15,
                       fontSize: 11,
                       textAnchor: 'middle'
                     }}
                     tick={{ fontSize: 10 }}
                   />
-                  <YAxis 
+                  <YAxis
                     stroke="#6c757d"
                     fontSize={11}
                     width={60}
-                    label={{ 
-                      value: 'मूल्य', 
-                      angle: -90, 
-                      position: 'insideLeft', 
+                    label={{
+                      value: 'मूल्य',
+                      angle: -90,
+                      position: 'insideLeft',
                       fontSize: 11,
                       textAnchor: 'middle'
                     }}
                     tick={{ fontSize: 10 }}
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend 
+                  <Legend
                     fontSize={11}
                     wrapperStyle={{ paddingTop: '10px' }}
                   />
-                  
+
                   {datumLevel !== null && selectedParameter !== 'प्रवाह' && selectedParameter !== 'व्हॉल्यूम' && (
                     <ReferenceLine
                       y={datumLevel}
@@ -282,36 +282,36 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
                       }}
                     />
                   )}
-                  
+
                   {(selectedParameter === 'सर्व' || selectedParameter === 'प्रवाह') && (
-                    <Line 
-                      type="monotone" 
-                      dataKey="प्रवाह" 
-                      stroke="#28a745" 
+                    <Line
+                      type="monotone"
+                      dataKey="प्रवाह"
+                      stroke="#28a745"
                       strokeWidth={2}
                       dot={{ r: 3 }}
                       activeDot={{ r: 5 }}
                       name="प्रवाह (लि./से.)"
                     />
                   )}
-                  
+
                   {(selectedParameter === 'सर्व' || selectedParameter === 'व्हॉल्यूम') && (
-                    <Line 
-                      type="monotone" 
-                      dataKey="व्हॉल्यूम" 
-                      stroke="#007bff" 
+                    <Line
+                      type="monotone"
+                      dataKey="व्हॉल्यूम"
+                      stroke="#007bff"
                       strokeWidth={2}
                       dot={{ r: 3 }}
                       activeDot={{ r: 5 }}
                       name="व्हॉल्यूम (लिटर)"
                     />
                   )}
-                  
+
                   {(selectedParameter === 'सर्व' || selectedParameter === 'पातळी') && (
-                    <Line 
-                      type="monotone" 
-                      dataKey="पातळी" 
-                      stroke="#ffc107" 
+                    <Line
+                      type="monotone"
+                      dataKey="पातळी"
+                      stroke="#ffc107"
                       strokeWidth={2}
                       dot={{ r: 3 }}
                       activeDot={{ r: 5 }}
@@ -329,7 +329,7 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
                 <p>या स्थानासाठी डेटा उपलब्ध नाही</p>
               </div>
             )}
-            
+
             <div style={{
               marginTop: '12px',
               padding: '10px',
@@ -349,8 +349,8 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
                 </div>
                 <div>
                   <strong>सरासरी प्रवाह:</strong> {
-                    graphData.length > 0 
-                      ? (graphData.reduce((sum, d) => sum + d.प्रवाह, 0) / graphData.length).toFixed(2) 
+                    graphData.length > 0
+                      ? (graphData.reduce((sum, d) => sum + d.प्रवाह, 0) / graphData.length).toFixed(2)
                       : '0'
                   } लि./से.
                 </div>
@@ -361,8 +361,8 @@ const LineGraphComponent = ({ flowmeters, timeBasedData, isTimeSliderActive }) =
                 </div>
                 <div>
                   <strong>सरासरी पातळी:</strong> {
-                    graphData.length > 0 
-                      ? (graphData.reduce((sum, d) => sum + d.पातळी, 0) / graphData.length).toFixed(2) 
+                    graphData.length > 0
+                      ? (graphData.reduce((sum, d) => sum + d.पातळी, 0) / graphData.length).toFixed(2)
                       : '0'
                   } मीटर
                 </div>
@@ -418,7 +418,7 @@ export default function FlowMap() {
 
   const getGroupForLocation = (location) => {
     const currentData = isTimeSliderActive ? Object.values(timeBasedData) : flowmeters;
-    
+
     if (!location) return currentData;
 
     switch (location) {
@@ -452,16 +452,16 @@ export default function FlowMap() {
     const validDischarges = locationDevices
       .map(fm => parseFloat(fm.discharge))
       .filter(d => !isNaN(d) && d !== 0);
-    
+
     const validVolumes = locationDevices
       .map(fm => parseFloat(fm.volume))
       .filter(v => !isNaN(v) && v !== 0);
 
-    const avgDischarge = validDischarges.length > 0 
+    const avgDischarge = validDischarges.length > 0
       ? (validDischarges.reduce((sum, d) => sum + d, 0) / validDischarges.length).toFixed(2)
       : '0.00';
-    
-    const totalVolume = validVolumes.length > 0 
+
+    const totalVolume = validVolumes.length > 0
       ? validVolumes.reduce((sum, v) => sum + v, 0).toFixed(2)
       : '0.00';
 
@@ -479,10 +479,10 @@ export default function FlowMap() {
       setIsLoading(true);
       setError(null);
       console.log('🔄 Fetching SMS data for time range:', selectedTimeRange);
-      
+
       const now = new Date();
       let startDate;
-      
+
       switch (selectedTimeRange) {
         case '1day':
           startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -501,7 +501,7 @@ export default function FlowMap() {
       }
 
       // Updated API endpoint - hardcoded to render.com backend
-      const res = await fetch('https://aniket-backend.onrender.com/flow-data');
+      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/flow-data`);
       if (!res.ok) {
         throw new Error(`API request failed with status ${res.status}`);
       }
@@ -518,7 +518,7 @@ export default function FlowMap() {
       }
 
       console.log('📡 Raw SMS data received:', list.length, 'messages');
-      
+
       const parsed = list
         .map((point, index) => {
           try {
@@ -530,12 +530,12 @@ export default function FlowMap() {
               return null;
             }
 
-            const receivedAt = new Date(point.x);
+            const receivedAt = new Date(point.timestamp);
             if (isNaN(receivedAt.getTime())) {
               console.warn('Invalid date for point:', point);
               return null;
             }
-            
+
             const timestamp = receivedAt.getTime();
             if (timestamp < startDate.getTime()) return null;
 
@@ -565,7 +565,7 @@ export default function FlowMap() {
         const minTime = Math.min(...timestamps);
         const maxTime = Math.max(...timestamps);
         setTimeRange({ min: minTime, max: maxTime });
-        
+
         if (!isTimeSliderActive) {
           setTimeSliderValue(maxTime);
         }
@@ -579,12 +579,12 @@ export default function FlowMap() {
         parsed.forEach(fm => {
           const key = fm.device_id;
           if (!updated[key]) updated[key] = [];
-          
+
           // Check if this reading already exists
           const exists = updated[key].some(
             r => r.receivedAt === fm.receivedAt && r.device_id === fm.device_id
           );
-          
+
           if (!exists) {
             updated[key].push(fm);
             // Sort by timestamp ascending
@@ -644,7 +644,7 @@ export default function FlowMap() {
   useEffect(() => {
     if (isTimeSliderActive && allHistoricalData.length > 0) {
       const dataAtTime = allHistoricalData.filter(data => data.timestamp <= timeSliderValue);
-      
+
       const latestByDevice = dataAtTime.reduce((acc, curr) => {
         const key = curr.device_id;
         if (!acc[key] || curr.timestamp > acc[key].timestamp) {
@@ -652,7 +652,7 @@ export default function FlowMap() {
         }
         return acc;
       }, {});
-      
+
       setTimeBasedData(latestByDevice);
     } else {
       const latestByDevice = flowmeters.reduce((acc, curr) => {
@@ -722,9 +722,9 @@ export default function FlowMap() {
     const map = mapRef.current;
     if (map) {
       map.setMaxBounds(allDevicesBounds);
-      map.flyTo([17.1, 74.75], 10, { 
-        duration: 1.2, 
-        easeLinearity: 0.3 
+      map.flyTo([17.1, 74.75], 10, {
+        duration: 1.2,
+        easeLinearity: 0.3
       });
     }
   };
@@ -799,7 +799,7 @@ export default function FlowMap() {
           gap: '10px'
         }}>
           <span>⚠️ {error}</span>
-          <button 
+          <button
             onClick={() => setError(null)}
             style={{
               background: 'none',
@@ -855,7 +855,7 @@ export default function FlowMap() {
             alignItems: 'center'
           }}>
             <span style={{ fontWeight: 'bold' }}>📊 स्थान आकडेवारी</span>
-            <button 
+            <button
               onClick={() => setShowStatsPanel(false)}
               style={{
                 background: 'none',
@@ -919,7 +919,7 @@ export default function FlowMap() {
                       {isTimeSliderActive ? 'ऐतिहासिक' : 'वर्तमान'}
                     </span>
                   </div>
-                  
+
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: '1fr 1fr',
@@ -938,7 +938,7 @@ export default function FlowMap() {
                       </div>
                       <div style={{ fontSize: '10px', color: '#666' }}>लि./से.</div>
                     </div>
-                    
+
                     <div style={{
                       backgroundColor: '#e3f2fd',
                       padding: '8px',
@@ -1052,16 +1052,16 @@ export default function FlowMap() {
       </div>
 
       {isTimeSliderActive && (
-        <div style={{ 
-          padding: '1rem', 
-          backgroundColor: '#f8f9fa', 
+        <div style={{
+          padding: '1rem',
+          backgroundColor: '#f8f9fa',
           border: '1px solid #dee2e6',
           borderRadius: '8px',
           margin: '0 1rem'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
             <h4 style={{ margin: 0 }}>🕰️ टाइम स्लाइडर</h4>
-            <button 
+            <button
               onClick={() => setIsPlaying(!isPlaying)}
               style={{
                 padding: '0.5rem 1rem',
@@ -1074,8 +1074,8 @@ export default function FlowMap() {
             >
               {isPlaying ? '⏸️ थांबवा' : '▶️ सुरू करा'}
             </button>
-            <select 
-              value={playbackSpeed} 
+            <select
+              value={playbackSpeed}
               onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
               style={{ padding: '0.3rem' }}
             >
@@ -1111,7 +1111,7 @@ export default function FlowMap() {
               </button>
             ))}
           </div>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
             <span style={{ minWidth: '120px', fontSize: '0.9rem' }}>
               {formatTimestamp(timeRange.min)}
@@ -1122,8 +1122,8 @@ export default function FlowMap() {
               max={timeRange.max}
               value={timeSliderValue}
               onChange={(e) => setTimeSliderValue(Number(e.target.value))}
-              style={{ 
-                flex: 1, 
+              style={{
+                flex: 1,
                 height: '8px',
                 borderRadius: '4px',
                 background: '#ddd',
@@ -1135,7 +1135,7 @@ export default function FlowMap() {
               {formatTimestamp(timeRange.max)}
             </span>
           </div>
-          
+
           <div style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '1rem', fontWeight: 'bold' }}>
             सध्याची वेळ: {formatTimestamp(timeSliderValue)}
           </div>
@@ -1232,8 +1232,8 @@ export default function FlowMap() {
             <tbody>
               {(() => {
                 const hist = history[selectedFlowmeter.device_id] || [];
-                const current = isTimeSliderActive ? 
-                  (timeBasedData[selectedFlowmeter.device_id] || selectedFlowmeter) : 
+                const current = isTimeSliderActive ?
+                  (timeBasedData[selectedFlowmeter.device_id] || selectedFlowmeter) :
                   selectedFlowmeter;
                 const previous = hist.length > 1 ? hist[hist.length - 2] : null;
 
@@ -1264,10 +1264,10 @@ export default function FlowMap() {
         </div>
       )}
 
-      <LineGraphComponent 
-        flowmeters={flowmeters} 
-        timeBasedData={timeBasedData} 
-        isTimeSliderActive={isTimeSliderActive} 
+      <LineGraphComponent
+        flowmeters={flowmeters}
+        timeBasedData={timeBasedData}
+        isTimeSliderActive={isTimeSliderActive}
       />
     </div>
   );
