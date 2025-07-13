@@ -68,7 +68,7 @@ export default function CanalTabs() {
 
   return (
     <div style={{ maxWidth: 900, margin: 'auto', padding: 20 }}>
-      <h2 style={{ textAlign: 'center', marginBottom: 16 }}>🚰 डिव्हाइस मॉनिटरिंग</h2>
+      <h2 style={{ textAlign: 'center', marginBottom: 16 }}>🚰 उपकरण स्थिती</h2>
 
       {/* 🔁 Tabs */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
