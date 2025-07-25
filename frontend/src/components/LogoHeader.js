@@ -27,6 +27,8 @@ const LogoHeader = () => {
           src={mhlogo}
           alt="Maharashtra Logo"
           height="100"
+         margin-bottom ='100'
+      
           className="mhlogo"
           style={{
             backgroundColor: 'transparent',
